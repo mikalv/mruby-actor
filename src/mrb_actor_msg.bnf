@@ -1,0 +1,68 @@
+The following ABNF grammar defines the mrb actor messages:
+
+    mrb_actor_msg   = *( INITIALIZE | INITIALIZE-OK | SEND-MESSAGE | SEND-OK | ASYNC-SEND-MESSAGE | ASYNC-SEND-OK | ASYNC-ERROR | ERROR )
+
+    ;  No description                                                        
+
+    INITIALIZE      = signature %d1 mrb_class args
+    signature       = %xAA %xA7             ; two octets
+    mrb_class       = string                ; 
+    args            = chunk                 ; 
+
+    ;  No description                                                        
+
+    INITIALIZE-OK   = signature %d2 object_id
+    object_id       = number-8              ; 
+
+    ;  No description                                                        
+
+    SEND-MESSAGE    = signature %d3 object_id method args
+    object_id       = number-8              ; 
+    method          = string                ; 
+    args            = chunk                 ; 
+
+    ;  No description                                                        
+
+    SEND-OK         = signature %d4 result
+    result          = chunk                 ; 
+
+    ;  No description                                                        
+
+    ASYNC-SEND-MESSAGE = signature %d5 uuid object_id method args
+    uuid            = uuid                  ; 
+    object_id       = number-8              ; 
+    method          = string                ; 
+    args            = chunk                 ; 
+
+    ;  No description                                                        
+
+    ASYNC-SEND-OK   = signature %d6 uuid result
+    uuid            = uuid                  ; 
+    result          = chunk                 ; 
+
+    ;  No description                                                        
+
+    ASYNC-ERROR     = signature %d7 uuid mrb_class error
+    uuid            = uuid                  ; 
+    mrb_class       = string                ; 
+    error           = string                ; 
+
+    ;  No description                                                        
+
+    ERROR           = signature %d8 mrb_class error
+    mrb_class       = string                ; 
+    error           = string                ; 
+
+    ; A chunk has 4-octet length + binary contents
+    chunk           = number-4 *OCTET
+
+    ; A uuid is 16-octet binary content 
+    uuid            = 16OCTET
+
+    ; Strings are always length + text contents
+    string          = number-1 *VCHAR
+
+    ; Numbers are unsigned integers in network byte order
+    number-1        = 1OCTET
+    number-4        = 4OCTET
+    number-8        = 8OCTET
