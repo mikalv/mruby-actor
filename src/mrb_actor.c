@@ -1,17 +1,18 @@
+#include <stdio.h>
+#include <mruby.h>
 #include <czmq.h>
+#include "mrb_actor_msg.h"
 #include <assert.h>
 #include <string.h>
-#include <mruby.h>
-#include <stdio.h>
 #include <mruby/throw.h>
-#include <mruby/compile.h>
+#include <mruby/array.h>
 #include <mruby/hash.h>
 #include <mruby/variable.h>
-#include <stdio.h>
-#include "mrb_actor_msg.h"
-#include <mruby/array.h>
-#include <mruby/string.h>
+#include <mruby/compile.h>
+#include <mruby/error.h>
+#include <mruby/data.h>
 #include <errno.h>
+#include <mruby/string.h>
 
 typedef struct {
   char *mrb_file;
@@ -107,6 +108,7 @@ mrb_actor_router_reader(zloop_z *reactor, zsock_t *router, void *args)
 {
   self_t *self = (self_t *) args;
   mrb_state *mrb = self->mrb;
+  int ai = mrb_gc_arena_save(mrb);
 
   int rc = mrb_actor_msg_recv(self->actor_msg, router);
   if (rc == -1)
@@ -122,33 +124,45 @@ mrb_actor_router_reader(zloop_z *reactor, zsock_t *router, void *args)
       MRB_TRY(&c_jmp) {
         struct RClass *mrb_class = mrb_class_get(mrb, mrb_actor_class);
         mrb_value obj;
-        if (args) {
+        if (zchunk_size(args) > 0) {
           mrb_value args_str = mrb_str_new_static(mrb, zchunk_data(args), zchunk_size(args));
-          mrb_value args = mrb_funcall(mrb, msgpack_mod, "unpack", 1, args_str);
-          if (!mrb_ary_p(args))
+          mrb_value args_obj = mrb_funcall(mrb, msgpack_mod, "unpack", 1, args_str);
+          if (!mrb_ary_p(args_obj))
             mrb_raise(mrb, E_ARGUMENT_ERROR, "args must be a Array");
-          obj = mrb_obj_new(mrb, mrb_class, RARRAY_LEN(args), RARRAY_PTR(args));
-        } else {
-          obj = mrb_obj_new(mrb, mrb_class, 0, NULL);
+          obj = mrb_obj_new(mrb, mrb_class, RARRAY_LEN(args_obj), RARRAY_PTR(args_obj));
         }
+        else
+          obj = mrb_obj_new(mrb, mrb_class, 0, NULL);
+
+        mrb_sym actor_state_sym = mrb_intern_lit(mrb, "mruby_actor_state");
+        mrb_value actor_state = mrb_gv_get(mrb, actor_state_sym);
         mrb_int object_id = mrb_obj_id(obj);
-        mrb_hash_set(mrb, global_state, mrb_fixnum_value(object_id), obj);
+        mrb_value object_id_val = mrb_fixnum_value(object_id);
+        mrb_hash_set(mrb, actor_state, object_id_val, obj);
+        mrb_actor_msg_set_id(self->actor_msg, MRB_ACTOR_MSG_INITIALIZE_OK);
+        mrb_actor_msg_set_object_id(self->actor_msg, object_id);
         mrb->jmp = prev_jmp;
       } MRB_CATCH(&c_jmp) {
         mrb->jmp = prev_jmp;
-        mrb_p(mrb, mrb_obj_value(mrb->exc));
+        mrb_value exc = mrb_obj_value(mrb->exc);
+        mrb_value exc_str = mrb_funcall(mrb, exc, "to_s", 0);
+        const char *exc_msg = mrb_string_value_cstr(mrb, exc_str);
+        mrb_actor_msg_set_id(self->actor_msg, MRB_ACTOR_MSG_ERROR);
+        mrb_actor_msg_set_mrb_class(self->actor_msg, mrb_class_name(mrb, mrb_class_ptr(mrb->exc)));
+        mrb_actor_msg_set_error(self->actor_msg, exc_msg);
       } MRB_END_EXC(&c_jmp);
     }
     break;
     case MRB_ACTOR_MSG_SEND:
     default: {
       mrb_actor_set_msg_id(self->actor_msg, MRB_ACTOR_MSG_ERROR);
-      mrb_actor_set_class(self->actor_msg, "Actor::ProtocolError");
+      mrb_actor_set_mrb_class(self->actor_msg, "Actor::ProtocolError");
       mrb_actor_set_error(self->actor_msg, "Invalid Message recieved");
     }
   }
 
   rc = mrb_actor_msg_send(self->actor_msg, router);
+  mrb_gc_arena_restore(mrb, ai);
 
   return rc;
 }
@@ -282,7 +296,8 @@ mrb_actor_initalize(mrb_state *mrb, mrb_value self)
     actor_msg, &mrb_actor_msg_type));
 
   if (zactor && actor_msg) {
-    mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "actor_msg"), actor_msg_obj);
+    mrb_sym actor_msg_sym = mrb_intern_lit(mrb, "actor_msg")
+    mrb_iv_set(mrb, self, actor_msg_sym, actor_msg_obj);
     if (router_endpoint) {
       if (zsock_send(zactor, "ss", "BIND ROUTER", router_endpoint) == 0 && zsock_wait(zactor) == 0)
         zsock_connect(dealer, "%s", router_endpoint);
@@ -320,7 +335,7 @@ mrb_actor_init(mrb_state *mrb, mrb_value self)
   errno = 0;
   char *mrb_actor_class;
   mrb_value *argv;
-  mrb_int argc;
+  mrb_int argc = 0;
 
   mrb_get_args(mrb, "z&", &mrb_actor_class, &argv, &argc);
 
@@ -328,7 +343,7 @@ mrb_actor_init(mrb_state *mrb, mrb_value self)
   mrb_actor_msg_t *actor_msg = (mrb_actor_msg_t *) DATA_PTR(actor_msg_obj);
   mrb_actor_msg_set_mrb_class(actor_msg, mrb_actor_class);
 
-  if (argc) {
+  if (argc > 0) {
     mrb_value args_ary = mrb_ary_new_from_values(mrb, argc, argv);
     mrb_value args_str = mrb_funcall(mrb, args_ary, "to_msgpack", 0, NULL);
     zchunk_t *args = zchunk_new(RSTRING_PTR(args_str), RSTRING_LEN(args_str));
@@ -337,7 +352,8 @@ mrb_actor_init(mrb_state *mrb, mrb_value self)
 
   mrb_actor_msg_set_id(actor_msg, MRB_ACTOR_MSG_INITIALIZE);
 
-  mrb_value dealer_sock = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "dealer"));
+  mrb_sym dealer_sym = mrb_intern_lit(mrb, "dealer");
+  mrb_value dealer_sock = mrb_iv_get(mrb, self, dealer_sym);
   if (mrb_actor_msg_send(actor_msg, (zsock_t *) DATA_PTR(dealer_sock)) == 0 &&
     mrb_actor_msg_recv(actor_msg, (zsock_t *) DATA_PTR(dealer_sock) == 0) {
   }
