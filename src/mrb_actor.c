@@ -20,7 +20,6 @@
 
 typedef struct {
   char *mrb_file;
-  FILE *mrb_file_handle;
   mrb_state *mrb;
   zloop_t *reactor;
   mrb_actor_msg_t *actor_msg;
@@ -62,10 +61,8 @@ mrb_actor_pipe_reader(zloop_t *reactor, zsock_t *pipe, void *args)
   int rc = 0;
   zmsg_t *msg = zmsg_recv(pipe);
   if (!msg)
-    return -1;    // Interrupted
 
   char *command = zmsg_popstr (msg);
-  printf("command: %s\n", command);
   if (streq(command, "$TERM"))
     rc = -1;
   else
@@ -133,7 +130,6 @@ mrb_actor_router_reader(zloop_t *reactor, zsock_t *router, void *args)
         if (zchunk_size(args) > 0) {
           mrb_value args_str = mrb_str_new_static(mrb, zchunk_data(args), zchunk_size(args));
           mrb_value args_obj = mrb_funcall(mrb,
-            mrb_obj_value(mrb_class_get(mrb, "MessagePack")),
             "unpack", 1, args_str);
           if (!mrb_array_p(args_obj))
             mrb_raise(mrb, E_ARGUMENT_ERROR, "args must be a Array");
@@ -142,8 +138,6 @@ mrb_actor_router_reader(zloop_t *reactor, zsock_t *router, void *args)
         else
           obj = mrb_obj_new(mrb, mrb_class, 0, NULL);
 
-        if (mrb->exc)
-          mrb_exc_raise(mrb, mrb_obj_value(mrb->exc));
         mrb_sym actor_state_sym = mrb_intern_lit(mrb, "mruby_actor_state");
         mrb_value actor_state = mrb_gv_get(mrb, actor_state_sym);
         mrb_int object_id = mrb_obj_id(obj);
@@ -158,12 +152,10 @@ mrb_actor_router_reader(zloop_t *reactor, zsock_t *router, void *args)
         mrb_value exc_str = mrb_funcall(mrb, exc, "to_s", 0);
         const char *exc_msg = mrb_string_value_cstr(mrb, &exc_str);
         mrb_actor_msg_set_id(self->actor_msg, MRB_ACTOR_MSG_ERROR);
-        mrb_actor_msg_set_mrb_class(self->actor_msg, mrb_class_name(mrb, mrb_class(mrb, mrb_obj_value(mrb->exc))));
         mrb_actor_msg_set_error(self->actor_msg, exc_msg);
       } MRB_END_EXC(&c_jmp);
     }
     break;
-    case MRB_ACTOR_MSG_SEND_MESSAGE:
     default: {
       mrb_actor_msg_set_id(self->actor_msg, MRB_ACTOR_MSG_ERROR);
       mrb_actor_msg_set_mrb_class(self->actor_msg, "Actor::ProtocolError");
@@ -200,7 +192,6 @@ mrb_actor_pull_reader(zloop_t *reactor, zsock_t *pull, void *args)
 }
 
 static self_t *
-s_self_new(zsock_t *pipe, const char *mrb_file)
 {
   assert(pipe);
   assert(mrb_file);
@@ -217,10 +208,7 @@ s_self_new(zsock_t *pipe, const char *mrb_file)
   if (self->mrb_file_handle)
     self->mrb = mrb_open();
   if (self->mrb) {
-    mrb_state *mrb = self->mrb;
-    struct mrb_jmpbuf *prev_jmp = mrb->jmp;
     struct mrb_jmpbuf c_jmp;
-    MRB_TRY(&c_jmp) {
       mrb->jmp = &c_jmp;
       mrb_value ret = mrb_load_file(mrb, self->mrb_file_handle);
       if (mrb_undef_p(ret))
@@ -230,10 +218,8 @@ s_self_new(zsock_t *pipe, const char *mrb_file)
       mrb_gv_set(mrb, actor_state_sym, actor_state);
       self->reactor = zloop_new();
       mrb->jmp = prev_jmp;
-    } MRB_CATCH(&c_jmp) {
       mrb->jmp = prev_jmp;
       mrb_p(mrb, mrb_obj_value(mrb->exc));
-    } MRB_END_EXC(&c_jmp);
   }
   if (self->reactor) {
     zloop_ignore_interrupts(self->reactor);
@@ -258,9 +244,7 @@ s_self_new(zsock_t *pipe, const char *mrb_file)
 }
 
 static void
-mrb_zactor_fn(zsock_t *pipe, void *mrb_file)
 {
-  self_t *self = s_self_new(pipe, (const char *) mrb_file);
   assert(self);
 
   zsock_signal(pipe, 0);
@@ -271,18 +255,13 @@ mrb_zactor_fn(zsock_t *pipe, void *mrb_file)
   zsock_signal(pipe, 0);
 }
 
-static void
-mrb_actor_msg_free(mrb_state *mrb, void *p)
 {
   mrb_actor_msg_destroy((mrb_actor_msg_t **) &p);
 }
-
-static const struct mrb_data_type mrb_actor_msg_type = {
   "$i_mrb_actor_msg_type", mrb_actor_msg_free
 };
 
 static mrb_value
-mrb_actor_initalize(mrb_state *mrb, mrb_value self)
 {
   errno = 0;
   mrb_value mrb_file;
@@ -295,7 +274,6 @@ mrb_actor_initalize(mrb_state *mrb, mrb_value self)
   mrb_value dealer = mrb_obj_new(mrb,
     mrb_class_get_under(mrb,
       mrb_module_get(mrb, "CZMQ"), "Zsock"),
-    1, dealer_args);
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "dealer"), dealer);
 
   mrb_value push_args[1];
@@ -309,7 +287,6 @@ mrb_actor_initalize(mrb_state *mrb, mrb_value self)
   mrb_actor_msg_t *actor_msg = mrb_actor_msg_new();
   mrb_value actor_msg_obj = mrb_obj_value(mrb_data_object_alloc(mrb,
     mrb_class_get_under(mrb, mrb_class(mrb, self), "Msg"),
-    actor_msg, &mrb_actor_msg_type));
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "actor_msg"), actor_msg_obj);
 
   mrb_value actor_args[2];
@@ -318,7 +295,6 @@ mrb_actor_initalize(mrb_state *mrb, mrb_value self)
 
   mrb_value zactor = mrb_obj_new(mrb,
     mrb_class_get_under(mrb,
-      mrb_module_get(mrb, "CZMQ"), "Zactor"),
     2, actor_args);
   mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "zactor"), zactor);
 
