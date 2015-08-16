@@ -224,11 +224,57 @@ mrb_actor_pull_reader(zloop_t* reactor, zsock_t* pull, void* args)
 {
   self_t* self = (self_t*)args;
   mrb_state* mrb = self->mrb;
+  int ai = mrb_gc_arena_save(mrb);
 
   int rc = mrb_actor_msg_recv(self->actor_msg, pull);
+  if (rc == -1)
+    return rc;
 
   switch (mrb_actor_msg_id(self->actor_msg)) {
-  case MRB_ACTOR_MSG_ASYNC_SEND_MESSAGE:
+  case MRB_ACTOR_MSG_ASYNC_SEND_MESSAGE: {
+    uint64_t object_id = mrb_actor_msg_object_id(self->actor_msg);
+    const char* method = mrb_actor_msg_method(self->actor_msg);
+    zchunk_t* args = mrb_actor_msg_args(self->actor_msg);
+    struct mrb_jmpbuf* prev_jmp = mrb->jmp;
+    struct mrb_jmpbuf c_jmp;
+
+    MRB_TRY(&c_jmp)
+    {
+      mrb->jmp = &c_jmp;
+      mrb_sym actor_state_sym = mrb_intern_lit(mrb, "mruby_actor_state");
+      mrb_value actor_state = mrb_gv_get(mrb, actor_state_sym);
+      mrb_value object_id_val = mrb_fixnum_value(object_id);
+      mrb_value obj = mrb_hash_get(mrb, actor_state, object_id_val);
+      mrb_value result;
+      if (zchunk_size(args) > 0) {
+        mrb_value args_str = mrb_str_new_static(mrb, zchunk_data(args), zchunk_size(args));
+        mrb_value args_obj = mrb_funcall(mrb, mrb_obj_value(mrb_module_get(mrb, "MessagePack")), "unpack", 1, args_str);
+        if (!mrb_array_p(args_obj))
+          mrb_raise(mrb, E_ARGUMENT_ERROR, "args must be a Array");
+        mrb_sym method_sym = mrb_intern_cstr(mrb, method);
+        result = mrb_funcall_argv(mrb, obj, method_sym, RARRAY_LEN(args_obj), RARRAY_PTR(args_obj));
+      }
+      else
+        result = mrb_funcall(mrb, obj, method, 0);
+
+      mrb_value result_str = mrb_funcall(mrb, result, "to_msgpack", 0);
+      zchunk_t* result_chunk = zchunk_new(RSTRING_PTR(result_str), RSTRING_LEN(result_str));
+      mrb_actor_msg_set_id(self->actor_msg, MRB_ACTOR_MSG_ASYNC_SEND_OK);
+      mrb_actor_msg_set_result(self->actor_msg, &result_chunk);
+    }
+    MRB_CATCH(&c_jmp)
+    {
+      mrb->jmp = prev_jmp;
+      mrb_value exc = mrb_obj_value(mrb->exc);
+      mrb_value exc_str = mrb_funcall(mrb, exc, "to_s", 0);
+      const char* exc_msg = mrb_string_value_cstr(mrb, &exc_str);
+      mrb_actor_msg_set_id(self->actor_msg, MRB_ACTOR_MSG_ASYNC_ERROR);
+      mrb_actor_msg_set_mrb_class(self->actor_msg, mrb_obj_classname(mrb, mrb_obj_value(mrb->exc)));
+      mrb_actor_msg_set_error(self->actor_msg, exc_msg);
+      mrb->exc = NULL;
+    }
+    MRB_END_EXC(&c_jmp);
+  } break;
   default: {
     mrb_actor_msg_set_id(self->actor_msg, MRB_ACTOR_MSG_ASYNC_ERROR);
     mrb_actor_msg_set_mrb_class(self->actor_msg, "Actor::ProtocolError");
@@ -237,6 +283,7 @@ mrb_actor_pull_reader(zloop_t* reactor, zsock_t* pull, void* args)
   }
 
   rc = mrb_actor_msg_send(self->actor_msg, self->pub);
+  mrb_gc_arena_restore(mrb, ai);
 
   return rc;
 }
@@ -474,6 +521,43 @@ mrb_actor_send(mrb_state* mrb, mrb_value self)
   return self;
 }
 
+static mrb_value
+mrb_actor_async_send(mrb_state* mrb, mrb_value self)
+{
+  errno = 0;
+  mrb_int object_id;
+  mrb_sym method;
+  mrb_value* argv;
+  mrb_int argc = 0;
+
+  mrb_get_args(mrb, "in*", &object_id, &method, &argv, &argc);
+
+  mrb_value actor_msg_obj = mrb_iv_get(mrb, self, mrb_intern_lit(mrb, "actor_msg"));
+  mrb_actor_msg_t* actor_msg = (mrb_actor_msg_t*)DATA_PTR(actor_msg_obj);
+  mrb_actor_msg_set_id(actor_msg, MRB_ACTOR_MSG_ASYNC_SEND_MESSAGE);
+  zuuid_t* uuid = zuuid_new();
+  mrb_actor_msg_set_uuid(actor_msg, uuid);
+  zuuid_destroy(&uuid);
+  mrb_actor_msg_set_object_id(actor_msg, object_id);
+  mrb_actor_msg_set_method(actor_msg, mrb_sym2name(mrb, method));
+
+  if (argc > 0) {
+    mrb_value args_ary = mrb_ary_new_from_values(mrb, argc, argv);
+    mrb_value args_str = mrb_funcall(mrb, args_ary, "to_msgpack", 0);
+    zchunk_t* args = zchunk_new(RSTRING_PTR(args_str), RSTRING_LEN(args_str));
+    mrb_actor_msg_set_args(actor_msg, &args);
+  }
+
+  mrb_sym push_sym = mrb_intern_lit(mrb, "push");
+  mrb_value push = mrb_iv_get(mrb, self, push_sym);
+  if (mrb_actor_msg_send(actor_msg, (zsock_t*)DATA_PTR(push)) == 0) {
+  }
+  else
+    mrb_sys_fail(mrb, "mrb_actor_async_send");
+
+  return self;
+}
+
 static void
 mrb_actor_msg_free(mrb_state* mrb, void* p)
 {
@@ -497,7 +581,7 @@ mrb_actor_msg_init(mrb_state* mrb, mrb_value self)
     mrb_exc_raise(mrb, mrb_obj_value(mrb->nomem_err));
   }
   else
-    mrb_sys_fail(mrb, "mrb_actor_msg_new");
+    mrb_sys_fail(mrb, "mrb_actor_msg_init");
 
   return self;
 }
@@ -510,6 +594,7 @@ void mrb_mruby_actor_gem_init(mrb_state* mrb)
   mrb_define_method(mrb, mrb_actor_class, "initialize", mrb_actor_initialize, (MRB_ARGS_REQ(1) | MRB_ARGS_REST()));
   mrb_define_method(mrb, mrb_actor_class, "init", mrb_actor_init, (MRB_ARGS_REQ(1) | MRB_ARGS_REST()));
   mrb_define_method(mrb, mrb_actor_class, "send", mrb_actor_send, (MRB_ARGS_REQ(2) | MRB_ARGS_REST()));
+  mrb_define_method(mrb, mrb_actor_class, "async_send", mrb_actor_async_send, (MRB_ARGS_REQ(2) | MRB_ARGS_REST()));
 
   mrb_actor_msg_class = mrb_define_class_under(mrb, mrb_actor_class, "Msg", mrb->object_class);
   MRB_SET_INSTANCE_TT(mrb_actor_msg_class, MRB_TT_DATA);

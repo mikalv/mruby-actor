@@ -12,6 +12,8 @@ class Actor
       @actor.send(@object_id, m, *args)
     end
 
-    alias :<< :send
+    def async_send(m, *args)
+      @actor.async_send(@object_id, m, *args)
+    end
   end
 end
