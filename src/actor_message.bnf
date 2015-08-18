@@ -1,6 +1,6 @@
-The following ABNF grammar defines the mrb actor messages:
+The following ABNF grammar defines the mruby actor messages:
 
-    mrb_actor_msg   = *( INITIALIZE | INITIALIZE-OK | SEND-MESSAGE | SEND-OK | ASYNC-SEND-MESSAGE | ASYNC-SEND-OK | ASYNC-ERROR | ERROR )
+    actor_message   = *( INITIALIZE | INITIALIZE-OK | SEND-MESSAGE | SEND-OK | ASYNC-SEND-MESSAGE | ASYNC-SEND-OK | ASYNC-ERROR | ERROR )
 
     ;  No description                                                        
 

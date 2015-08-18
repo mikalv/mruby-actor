@@ -1,7 +1,7 @@
-<class name = "mrb_actor_msg"
+<class name = "Actor_message"
   signature = "7"
-  title = "mrb actor messages"
-  script = "zproto_codec_c"
+  title = "mruby actor messages"
+  script = "zproto_codec_mruby"
   package_dir = ".">
 
   <message name = "initialize" id = "1">

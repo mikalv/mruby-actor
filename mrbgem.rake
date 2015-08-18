@@ -5,4 +5,5 @@
   spec.add_dependency 'mruby-errno'
   spec.add_dependency 'mruby-czmq'
   spec.add_dependency 'mruby-msgpack', github: 'Asmod4n/mruby-simplemsgpack'
+  spec.add_dependency 'mruby-libsodium'
 end
