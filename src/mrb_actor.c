@@ -1,22 +1,6 @@
-#include <stdio.h>
-#include <mruby.h>
-#include <czmq.h>
-#include <assert.h>
-#include <string.h>
-#include <mruby/throw.h>
-#include <mruby/array.h>
-#include <mruby/hash.h>
-#include <mruby/variable.h>
-#include <mruby/compile.h>
-#include <mruby/error.h>
-#include <mruby/data.h>
-#include <errno.h>
-#include <mruby/string.h>
-#include <mruby/value.h>
-#include <mruby/data.h>
-#include <mruby/class.h>
-#include "mruby/actor.h"
 #include "./mrb_actor_message_body.h"
+#include <mruby/compile.h>
+#include <mruby/variable.h>
 
 typedef struct {
     char* mrb_file;
@@ -135,17 +119,11 @@ mrb_actor_router_reader(zloop_t* reactor, zsock_t* router, void* args)
             mrb_value mrb_actor_class_str = mrb_str_new_static(mrb, mrb_actor_class_cstr, strlen(mrb_actor_class_cstr));
             mrb_value mrb_actor_class_obj = mrb_funcall(mrb, mrb_actor_class_str, "constantize", 0);
             struct RClass* mrb_actor_class_ptr = mrb_class_ptr(mrb_actor_class_obj);
-            mrb_value obj;
-            if (zchunk_size(args) > 0) {
-                mrb_value args_str = mrb_str_new_static(mrb, zchunk_data(args), zchunk_size(args));
-                mrb_value args_obj = mrb_funcall(mrb, mrb_obj_value(mrb_module_get(mrb, "MessagePack")), "unpack", 1, args_str);
-                if (!mrb_array_p(args_obj))
-                    mrb_raise(mrb, E_ARGUMENT_ERROR, "args must be a Array");
-                obj = mrb_obj_new(mrb, mrb_actor_class_ptr, RARRAY_LEN(args_obj), RARRAY_PTR(args_obj));
-            }
-            else
-                obj = mrb_obj_new(mrb, mrb_actor_class_ptr, 0, NULL);
-
+            mrb_value args_str = mrb_str_new_static(mrb, zchunk_data(args), zchunk_size(args));
+            mrb_value args_obj = mrb_funcall(mrb, mrb_obj_value(mrb_module_get(mrb, "MessagePack")), "unpack", 1, args_str);
+            if (!mrb_array_p(args_obj))
+                mrb_raise(mrb, E_ARGUMENT_ERROR, "args must be a Array");
+            mrb_value obj = mrb_obj_new(mrb, mrb_actor_class_ptr, RARRAY_LEN(args_obj), RARRAY_PTR(args_obj));
             mrb_sym actor_state_sym = mrb_intern_lit(mrb, "mruby_actor_state");
             mrb_value actor_state = mrb_gv_get(mrb, actor_state_sym);
             mrb_int object_id = mrb_obj_id(obj);
@@ -183,18 +161,12 @@ mrb_actor_router_reader(zloop_t* reactor, zsock_t* router, void* args)
             mrb_value actor_state = mrb_gv_get(mrb, actor_state_sym);
             mrb_value object_id_val = mrb_fixnum_value(object_id);
             mrb_value obj = mrb_hash_get(mrb, actor_state, object_id_val);
-            mrb_value result;
-            if (zchunk_size(args) > 0) {
-                mrb_value args_str = mrb_str_new_static(mrb, zchunk_data(args), zchunk_size(args));
-                mrb_value args_obj = mrb_funcall(mrb, mrb_obj_value(mrb_module_get(mrb, "MessagePack")), "unpack", 1, args_str);
-                if (!mrb_array_p(args_obj))
-                    mrb_raise(mrb, E_ARGUMENT_ERROR, "args must be a Array");
-                mrb_sym method_sym = mrb_intern_cstr(mrb, method);
-                result = mrb_funcall_argv(mrb, obj, method_sym, RARRAY_LEN(args_obj), RARRAY_PTR(args_obj));
-            }
-            else
-                result = mrb_funcall(mrb, obj, method, 0);
-
+            mrb_value args_str = mrb_str_new_static(mrb, zchunk_data(args), zchunk_size(args));
+            mrb_value args_obj = mrb_funcall(mrb, mrb_obj_value(mrb_module_get(mrb, "MessagePack")), "unpack", 1, args_str);
+            if (!mrb_array_p(args_obj))
+                mrb_raise(mrb, E_ARGUMENT_ERROR, "args must be a Array");
+            mrb_sym method_sym = mrb_intern_cstr(mrb, method);
+            mrb_value result = mrb_funcall_argv(mrb, obj, method_sym, RARRAY_LEN(args_obj), RARRAY_PTR(args_obj));
             mrb_value result_str = mrb_funcall(mrb, result, "to_msgpack", 0);
             zchunk_t* result_chunk = zchunk_new(RSTRING_PTR(result_str), RSTRING_LEN(result_str));
             actor_message_set_id(self->actor_msg, ACTOR_MESSAGE_SEND_OK);
@@ -253,18 +225,12 @@ mrb_actor_pull_reader(zloop_t* reactor, zsock_t* pull, void* args)
             mrb_value actor_state = mrb_gv_get(mrb, actor_state_sym);
             mrb_value object_id_val = mrb_fixnum_value(object_id);
             mrb_value obj = mrb_hash_get(mrb, actor_state, object_id_val);
-            mrb_value result;
-            if (zchunk_size(args) > 0) {
-                mrb_value args_str = mrb_str_new_static(mrb, zchunk_data(args), zchunk_size(args));
-                mrb_value args_obj = mrb_funcall(mrb, mrb_obj_value(mrb_module_get(mrb, "MessagePack")), "unpack", 1, args_str);
-                if (!mrb_array_p(args_obj))
-                    mrb_raise(mrb, E_ARGUMENT_ERROR, "args must be a Array");
-                mrb_sym method_sym = mrb_intern_cstr(mrb, method);
-                result = mrb_funcall_argv(mrb, obj, method_sym, RARRAY_LEN(args_obj), RARRAY_PTR(args_obj));
-            }
-            else
-                result = mrb_funcall(mrb, obj, method, 0);
-
+            mrb_value args_str = mrb_str_new_static(mrb, zchunk_data(args), zchunk_size(args));
+            mrb_value args_obj = mrb_funcall(mrb, mrb_obj_value(mrb_module_get(mrb, "MessagePack")), "unpack", 1, args_str);
+            if (!mrb_array_p(args_obj))
+                mrb_raise(mrb, E_ARGUMENT_ERROR, "args must be a Array");
+            mrb_sym method_sym = mrb_intern_cstr(mrb, method);
+            mrb_value result = mrb_funcall_argv(mrb, obj, method_sym, RARRAY_LEN(args_obj), RARRAY_PTR(args_obj));
             mrb_value result_str = mrb_funcall(mrb, result, "to_msgpack", 0);
             zchunk_t* result_chunk = zchunk_new(RSTRING_PTR(result_str), RSTRING_LEN(result_str));
             actor_message_set_id(self->actor_msg, ACTOR_MESSAGE_ASYNC_SEND_OK);

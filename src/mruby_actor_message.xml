@@ -1,4 +1,4 @@
-<class name = "Actor_message"
+<class name = "actor_message"
   signature = "7"
   title = "mruby actor messages"
   script = "zproto_codec_mruby"

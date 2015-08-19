@@ -26,10 +26,12 @@
 #include <errno.h>
 #include <mruby.h>
 #include <mruby/array.h>
+#include <mruby/class.h>
 #include <mruby/data.h>
 #include <mruby/error.h>
 #include <mruby/hash.h>
 #include <mruby/string.h>
+#include <mruby/throw.h>
 
 static void
 mrb_actor_message_destroy (mrb_state *mrb, void *p)
@@ -85,7 +87,6 @@ mrb_actor_message_recv (mrb_state *mrb, mrb_value mrb_self)
     return mrb_self;
 }
 
-
 //  --------------------------------------------------------------------------
 //  Send the actor_message to the socket. Does not destroy it. Returns self if
 //  OK, else raises an exception.
@@ -113,7 +114,6 @@ mrb_actor_message_send (mrb_state *mrb, mrb_value mrb_self)
     return mrb_self;
 }
 
-
 //  --------------------------------------------------------------------------
 //  Print contents of message to stdout
 
@@ -127,9 +127,8 @@ mrb_actor_message_print (mrb_state *mrb, mrb_value mrb_self)
     return mrb_self;
 }
 
-
 //  --------------------------------------------------------------------------
-//  Get/set the message routing_id
+//  Get the message routing_id
 
 static mrb_value
 mrb_actor_message_routing_id (mrb_state *mrb, mrb_value mrb_self)
@@ -140,6 +139,8 @@ mrb_actor_message_routing_id (mrb_state *mrb, mrb_value mrb_self)
 
     return mrb_str_new_static (mrb, zframe_data (routing_id), zframe_size (routing_id));
 }
+
+//  Set the message routing_id
 
 static mrb_value
 mrb_actor_message_set_routing_id (mrb_state *mrb, mrb_value mrb_self)
@@ -164,9 +165,8 @@ mrb_actor_message_set_routing_id (mrb_state *mrb, mrb_value mrb_self)
     return mrb_self;
 }
 
-
 //  --------------------------------------------------------------------------
-//  Get/set the actor_message id
+//  Get the actor_message id
 
 static mrb_value
 mrb_actor_message_id (mrb_state *mrb, mrb_value mrb_self)
@@ -177,6 +177,8 @@ mrb_actor_message_id (mrb_state *mrb, mrb_value mrb_self)
 
     return mrb_fixnum_value (actor_message_id (self));
 }
+
+// Set the actor_message id
 
 static mrb_value
 mrb_actor_message_set_id (mrb_state *mrb, mrb_value mrb_self)
@@ -209,7 +211,7 @@ mrb_actor_message_command (mrb_state *mrb, mrb_value mrb_self)
 }
 
 //  --------------------------------------------------------------------------
-//  Get/set the mrb_class field
+//  Get the mrb_class field
 
 static mrb_value
 mrb_actor_message_mrb_class (mrb_state *mrb, mrb_value mrb_self)
@@ -218,8 +220,10 @@ mrb_actor_message_mrb_class (mrb_state *mrb, mrb_value mrb_self)
 
     const char *mrb_class = actor_message_mrb_class (self);
 
-    return mrb_str_new_static(mrb, mrb_class, strlen (mrb_class));
+    return mrb_str_new_static (mrb, mrb_class, strlen (mrb_class));
 }
+
+// Set the mrb_class field
 
 static mrb_value
 mrb_actor_message_set_mrb_class (mrb_state *mrb, mrb_value mrb_self)
@@ -268,7 +272,7 @@ mrb_actor_message_set_args (mrb_state *mrb, mrb_value mrb_self)
 }
 
 //  --------------------------------------------------------------------------
-//  Get/set the object_id field
+//  Get the object_id field
 
 static mrb_value
 mrb_actor_message_object_id (mrb_state *mrb, mrb_value mrb_self)
@@ -279,6 +283,8 @@ mrb_actor_message_object_id (mrb_state *mrb, mrb_value mrb_self)
 
     return mrb_fixnum_value (actor_message_object_id (self));
 }
+
+// Set the object_id field
 
 static mrb_value
 mrb_actor_message_set_object_id (mrb_state *mrb, mrb_value mrb_self)
@@ -297,7 +303,7 @@ mrb_actor_message_set_object_id (mrb_state *mrb, mrb_value mrb_self)
 }
 
 //  --------------------------------------------------------------------------
-//  Get/set the method field
+//  Get the method field
 
 static mrb_value
 mrb_actor_message_method (mrb_state *mrb, mrb_value mrb_self)
@@ -306,8 +312,10 @@ mrb_actor_message_method (mrb_state *mrb, mrb_value mrb_self)
 
     const char *method = actor_message_method (self);
 
-    return mrb_str_new_static(mrb, method, strlen (method));
+    return mrb_str_new_static (mrb, method, strlen (method));
 }
+
+// Set the method field
 
 static mrb_value
 mrb_actor_message_set_method (mrb_state *mrb, mrb_value mrb_self)
@@ -356,7 +364,8 @@ mrb_actor_message_set_result (mrb_state *mrb, mrb_value mrb_self)
 }
 
 //  --------------------------------------------------------------------------
-//  Get/set the uuid field
+//  Get the uuid field
+
 static mrb_value
 mrb_actor_message_uuid (mrb_state *mrb, mrb_value mrb_self)
 {
@@ -366,6 +375,8 @@ mrb_actor_message_uuid (mrb_state *mrb, mrb_value mrb_self)
 
     return mrb_str_new_static (mrb, zuuid_data (uuid), zuuid_size (uuid));
 }
+
+// Set the uuid field
 
 static mrb_value
 mrb_actor_message_set_uuid (mrb_state *mrb, mrb_value mrb_self)
@@ -387,8 +398,22 @@ mrb_actor_message_set_uuid (mrb_state *mrb, mrb_value mrb_self)
     return mrb_self;
 }
 
+// Create a uuid
+
+static mrb_value
+mrb_actor_message_create_uuid (mrb_state *mrb, mrb_value mrb_self)
+{
+    actor_message_t *self = (actor_message_t *) DATA_PTR (mrb_self);
+
+    zuuid_t *uuid = zuuid_new ();
+    actor_message_set_uuid (self, uuid);
+    zuuid_destroy (&uuid);
+
+    return mrb_self;
+}
+
 //  --------------------------------------------------------------------------
-//  Get/set the error field
+//  Get the error field
 
 static mrb_value
 mrb_actor_message_error (mrb_state *mrb, mrb_value mrb_self)
@@ -397,8 +422,10 @@ mrb_actor_message_error (mrb_state *mrb, mrb_value mrb_self)
 
     const char *error = actor_message_error (self);
 
-    return mrb_str_new_static(mrb, error, strlen (error));
+    return mrb_str_new_static (mrb, error, strlen (error));
 }
+
+// Set the error field
 
 static mrb_value
 mrb_actor_message_set_error (mrb_state *mrb, mrb_value mrb_self)

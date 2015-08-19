@@ -40,5 +40,6 @@
     mrb_define_method (mrb, actor_message_class, "result=", mrb_actor_message_set_result, MRB_ARGS_REQ(1));
     mrb_define_method (mrb, actor_message_class, "uuid", mrb_actor_message_uuid, MRB_ARGS_NONE());
     mrb_define_method (mrb, actor_message_class, "uuid=", mrb_actor_message_set_uuid, MRB_ARGS_REQ(1));
+    mrb_define_method (mrb, actor_message_class, "create_uuid", mrb_actor_message_create_uuid, MRB_ARGS_NONE());
     mrb_define_method (mrb, actor_message_class, "error", mrb_actor_message_error, MRB_ARGS_NONE());
     mrb_define_method (mrb, actor_message_class, "error=", mrb_actor_message_set_error, MRB_ARGS_REQ(1));
