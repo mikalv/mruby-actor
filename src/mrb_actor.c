@@ -418,12 +418,12 @@ mrb_actor_initialize(mrb_state* mrb, mrb_value self)
             if (zsock_connect(DATA_PTR(dealer), "%s", endpoint) == -1) {
                 zsys_warning("could not connect dealer to %s", endpoint);
                 zstr_free(&endpoint);
-                mrb_sys_fail(mrb, "mrb_actor_initialize");
+                mrb_sys_fail(mrb, "zsock_connect");
             }
             zstr_free(&endpoint);
         }
         else
-            mrb_sys_fail(mrb, "mrb_actor_initialize");
+            mrb_sys_fail(mrb, "zsock_send");
     }
     if (pull_endpoint) {
         if (zsock_send(DATA_PTR(zactor), "ss", "BIND PULL", pull_endpoint) == 0 && zsock_wait(DATA_PTR(zactor)) == 0) {
@@ -434,12 +434,12 @@ mrb_actor_initialize(mrb_state* mrb, mrb_value self)
             if (zsock_connect(DATA_PTR(push), "%s", endpoint) == -1) {
                 zsys_warning("could not connect pull to %s", endpoint);
                 zstr_free(&endpoint);
-                mrb_sys_fail(mrb, "mrb_actor_initialize");
+                mrb_sys_fail(mrb, "zsock_connect");
             }
             zstr_free(&endpoint);
         }
         else
-            mrb_sys_fail(mrb, "mrb_actor_initialize");
+            mrb_sys_fail(mrb, "zsock_send");
     }
     if (pub_endpoint) {
         if (zsock_send(DATA_PTR(zactor), "ss", "BIND PUB", pub_endpoint) == 0 && zsock_wait(DATA_PTR(zactor)) == 0) {
@@ -449,7 +449,7 @@ mrb_actor_initialize(mrb_state* mrb, mrb_value self)
             zstr_free(&endpoint);
         }
         else
-            mrb_sys_fail(mrb, "mrb_actor_initialize");
+            mrb_sys_fail(mrb, "zsock_send");
     }
 
     return self;

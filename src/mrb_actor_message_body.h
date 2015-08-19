@@ -46,7 +46,11 @@ static const struct mrb_data_type mrb_actor_message_type = {
 static mrb_value
 mrb_actor_message_initialize (mrb_state *mrb, mrb_value mrb_self)
 {
+    errno = 0;
     actor_message_t *self = actor_message_new ();
+    if (self == NULL) {
+        mrb_sys_fail (mrb, "actor_message_new");
+    }
 
     mrb_data_init (mrb_self, self, &mrb_actor_message_type);
 
@@ -73,7 +77,7 @@ mrb_actor_message_recv (mrb_state *mrb, mrb_value mrb_self)
 
     actor_message_t *self = (actor_message_t *) DATA_PTR (mrb_self);
 
-    if (actor_message_recv (self, input) != 0) {
+    if (actor_message_recv (self, input) == -1) {
         mrb_sys_fail (mrb, "actor_message_recv");
     }
 
@@ -101,7 +105,7 @@ mrb_actor_message_send (mrb_state *mrb, mrb_value mrb_self)
 
     actor_message_t *self = (actor_message_t *) DATA_PTR (mrb_self);
 
-    if (actor_message_send (self, output) != 0) {
+    if (actor_message_send (self, output) == -1) {
         mrb_sys_fail (mrb, "actor_message_send");
     }
 
@@ -153,6 +157,8 @@ mrb_actor_message_set_routing_id (mrb_state *mrb, mrb_value mrb_self)
     zframe_t *routing_id = zframe_new (routing_id_str, routing_id_len);
 
     actor_message_set_routing_id (self, routing_id);
+
+    zframe_destroy (&routing_id);
 
     return mrb_self;
 }
@@ -211,7 +217,7 @@ mrb_actor_message_mrb_class (mrb_state *mrb, mrb_value mrb_self)
 
     const char *mrb_class = actor_message_mrb_class (self);
 
-    return mrb_str_new_static(mrb, mrb_class, strlen(mrb_class));
+    return mrb_str_new_static(mrb, mrb_class, strlen (mrb_class));
 }
 
 static mrb_value
@@ -302,7 +308,7 @@ mrb_actor_message_method (mrb_state *mrb, mrb_value mrb_self)
 
     const char *method = actor_message_method (self);
 
-    return mrb_str_new_static(mrb, method, strlen(method));
+    return mrb_str_new_static(mrb, method, strlen (method));
 }
 
 static mrb_value
@@ -396,7 +402,7 @@ mrb_actor_message_error (mrb_state *mrb, mrb_value mrb_self)
 
     const char *error = actor_message_error (self);
 
-    return mrb_str_new_static(mrb, error, strlen(error));
+    return mrb_str_new_static(mrb, error, strlen (error));
 }
 
 static mrb_value
