@@ -28,6 +28,7 @@
 #include <mruby/array.h>
 #include <mruby/data.h>
 #include <mruby/error.h>
+#include <mruby/hash.h>
 #include <mruby/string.h>
 
 static void
@@ -223,17 +224,16 @@ mrb_actor_message_mrb_class (mrb_state *mrb, mrb_value mrb_self)
 static mrb_value
 mrb_actor_message_set_mrb_class (mrb_state *mrb, mrb_value mrb_self)
 {
-    char *value;
+    char *mrb_class;
 
-    mrb_get_args (mrb, "z", &value);
+    mrb_get_args (mrb, "z", &mrb_class);
 
     actor_message_t *self = (actor_message_t *) DATA_PTR (mrb_self);
 
-    actor_message_set_mrb_class (self, value);
+    actor_message_set_mrb_class (self, mrb_class);
 
     return mrb_self;
 }
-
 
 //  --------------------------------------------------------------------------
 //  Get the args field
@@ -267,7 +267,6 @@ mrb_actor_message_set_args (mrb_state *mrb, mrb_value mrb_self)
     return mrb_self;
 }
 
-
 //  --------------------------------------------------------------------------
 //  Get/set the object_id field
 
@@ -297,7 +296,6 @@ mrb_actor_message_set_object_id (mrb_state *mrb, mrb_value mrb_self)
     return mrb_self;
 }
 
-
 //  --------------------------------------------------------------------------
 //  Get/set the method field
 
@@ -314,17 +312,16 @@ mrb_actor_message_method (mrb_state *mrb, mrb_value mrb_self)
 static mrb_value
 mrb_actor_message_set_method (mrb_state *mrb, mrb_value mrb_self)
 {
-    char *value;
+    char *method;
 
-    mrb_get_args (mrb, "z", &value);
+    mrb_get_args (mrb, "z", &method);
 
     actor_message_t *self = (actor_message_t *) DATA_PTR (mrb_self);
 
-    actor_message_set_method (self, value);
+    actor_message_set_method (self, method);
 
     return mrb_self;
 }
-
 
 //  --------------------------------------------------------------------------
 //  Get the result field
@@ -358,7 +355,6 @@ mrb_actor_message_set_result (mrb_state *mrb, mrb_value mrb_self)
     return mrb_self;
 }
 
-
 //  --------------------------------------------------------------------------
 //  Get/set the uuid field
 static mrb_value
@@ -391,7 +387,6 @@ mrb_actor_message_set_uuid (mrb_state *mrb, mrb_value mrb_self)
     return mrb_self;
 }
 
-
 //  --------------------------------------------------------------------------
 //  Get/set the error field
 
@@ -408,16 +403,14 @@ mrb_actor_message_error (mrb_state *mrb, mrb_value mrb_self)
 static mrb_value
 mrb_actor_message_set_error (mrb_state *mrb, mrb_value mrb_self)
 {
-    char *value;
+    char *error;
 
-    mrb_get_args (mrb, "z", &value);
+    mrb_get_args (mrb, "z", &error);
 
     actor_message_t *self = (actor_message_t *) DATA_PTR (mrb_self);
 
-    actor_message_set_error (self, value);
+    actor_message_set_error (self, error);
 
     return mrb_self;
 }
-
-
 
