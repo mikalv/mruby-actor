@@ -70,11 +70,9 @@ class Actor
     @actor_message.create_uuid
     @actor_message.object_id = Integer(object_id)
     @actor_message.method = String(method)
-    if (args.count > 0)
-      @actor_message.args = args.to_msgpack
-    end
+    @actor_message.args = args.to_msgpack
     @actor_message.send(@push)
-    self
+    @actor_message.uuid.dup
   end
 
   class Proxy
