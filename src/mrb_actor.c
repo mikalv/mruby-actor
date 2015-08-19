@@ -55,7 +55,6 @@ mrb_actor_pipe_reader(zloop_t* reactor, zsock_t* pipe, void* args)
     else if (streq(command, "BIND ROUTER")) {
         char* endpoint = zmsg_popstr(msg);
         if (zsock_bind(self->router, "%s", endpoint) == -1) {
-            zsys_warning("could not bind router to %s (%s)", endpoint, zmq_strerror(zmq_errno()));
             zsock_signal(pipe, 1);
         }
         else {
@@ -67,7 +66,6 @@ mrb_actor_pipe_reader(zloop_t* reactor, zsock_t* pipe, void* args)
     else if (streq(command, "BIND PULL")) {
         char* endpoint = zmsg_popstr(msg);
         if (zsock_bind(self->pull, "%s", endpoint) == -1) {
-            zsys_warning("could not bind pull to %s (%s)", endpoint, zmq_strerror(zmq_errno()));
             zsock_signal(pipe, 1);
         }
         else {
@@ -79,7 +77,6 @@ mrb_actor_pipe_reader(zloop_t* reactor, zsock_t* pipe, void* args)
     else if (streq(command, "BIND PUB")) {
         char* endpoint = zmsg_popstr(msg);
         if (zsock_bind(self->pub, "%s", endpoint) == -1) {
-            zsys_warning("could not bind pub to %s (%s)", endpoint, zmq_strerror(zmq_errno()));
             zsock_signal(pipe, 1);
         }
         else {
@@ -267,19 +264,24 @@ static self_t*
 s_self_new(zsock_t* pipe, const char* mrb_file)
 {
     assert(pipe);
-    assert(mrb_file);
-    assert(strlen(mrb_file) > 0);
 
     int rc = -1;
     self_t* self = (self_t*)zmalloc(sizeof(self_t));
     if (!self)
         return NULL;
 
-    self->mrb_file = strdup(mrb_file);
-    if (self->mrb_file)
-        self->mrb_file_handle = fopen(self->mrb_file, "r");
-    if (self->mrb_file_handle)
+    if (mrb_file) {
+        assert(strlen(mrb_file) > 0);
+        self->mrb_file = strdup(mrb_file);
+        if (self->mrb_file)
+            self->mrb_file_handle = fopen(self->mrb_file, "r");
+        if (self->mrb_file_handle)
+            self->mrb = mrb_open();
+    }
+    else {
         self->mrb = mrb_open();
+    }
+
     if (self->mrb) {
         mrb_state* mrb = self->mrb;
         struct mrb_jmpbuf* prev_jmp = mrb->jmp;
@@ -287,9 +289,11 @@ s_self_new(zsock_t* pipe, const char* mrb_file)
         MRB_TRY(&c_jmp)
         {
             mrb->jmp = &c_jmp;
-            mrb_value ret = mrb_load_file(mrb, self->mrb_file_handle);
-            if (mrb->exc)
-                mrb_exc_raise(mrb, mrb_obj_value(mrb->exc));
+            if (self->mrb_file_handle) {
+                mrb_load_file(mrb, self->mrb_file_handle);
+                if (mrb->exc)
+                    mrb_exc_raise(mrb, mrb_obj_value(mrb->exc));
+            }
             mrb_sym actor_state_sym = mrb_intern_lit(mrb, "mruby_actor_state");
             mrb_value actor_state = mrb_hash_new(mrb);
             mrb_gv_set(mrb, actor_state_sym, actor_state);
@@ -319,12 +323,10 @@ s_self_new(zsock_t* pipe, const char* mrb_file)
         rc = zloop_reader(self->reactor, self->pull, mrb_actor_pull_reader, self);
     if (rc == 0)
         self->pub = zsock_new(ZMQ_PUB);
-    if (self->pub) {
+    if (self->pub)
         zsys_set_logident("mruby_actor");
-    }
-    else {
+    else
         s_self_destroy(&self);
-    }
 
     return self;
 }
@@ -343,90 +345,12 @@ mrb_zactor_fn(zsock_t* pipe, void* mrb_file)
     zsock_signal(pipe, 0);
 }
 
-static mrb_value
-mrb_actor_initialize(mrb_state* mrb, mrb_value self)
-{
-    errno = 0;
-    mrb_value mrb_file;
-    char *router_endpoint = NULL, *pull_endpoint = NULL, *pub_endpoint = NULL;
-
-    mrb_get_args(mrb, "S|zzz", &mrb_file, &router_endpoint, &pull_endpoint, &pub_endpoint);
-
-    mrb_value dealer_args[1];
-    dealer_args[0] = mrb_fixnum_value(ZMQ_DEALER);
-    mrb_value dealer = mrb_obj_new(mrb, mrb_class_get_under(mrb, mrb_module_get(mrb, "CZMQ"), "Zsock"), 1, dealer_args);
-    mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@dealer"), dealer);
-
-    mrb_value push_args[1];
-    push_args[0] = mrb_fixnum_value(ZMQ_PUSH);
-    mrb_value push = mrb_obj_new(mrb, mrb_class_get_under(mrb, mrb_module_get(mrb, "CZMQ"), "Zsock"), 1, push_args);
-    mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@push"), push);
-
-    mrb_value actor_message_obj = mrb_obj_new(mrb, mrb_class_get(mrb, "ActorMessage"), 0, NULL);
-    mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@actor_message"), actor_message_obj);
-
-    mrb_value actor_args[2];
-    actor_args[0] = mrb_cptr_value(mrb, mrb_zactor_fn);
-    actor_args[1] = mrb_file;
-
-    mrb_value zactor = mrb_obj_new(mrb,
-        mrb_class_get_under(mrb,
-                                       mrb_module_get(mrb, "CZMQ"), "Zactor"),
-        2, actor_args);
-    mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@zactor"), zactor);
-
-    if (router_endpoint) {
-        if (zsock_send(DATA_PTR(zactor), "ss", "BIND ROUTER", router_endpoint) == 0 && zsock_wait(DATA_PTR(zactor)) == 0) {
-            char* endpoint;
-            zsock_recv(DATA_PTR(zactor), "s", &endpoint);
-            mrb_assert(endpoint);
-            mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@router_endpoint"), mrb_str_new_cstr(mrb, endpoint));
-            if (zsock_connect(DATA_PTR(dealer), "%s", endpoint) == -1) {
-                zsys_warning("could not connect dealer to %s", endpoint);
-                zstr_free(&endpoint);
-                mrb_sys_fail(mrb, "zsock_connect");
-            }
-            zstr_free(&endpoint);
-        }
-        else
-            mrb_sys_fail(mrb, "zsock_send");
-    }
-    if (pull_endpoint) {
-        if (zsock_send(DATA_PTR(zactor), "ss", "BIND PULL", pull_endpoint) == 0 && zsock_wait(DATA_PTR(zactor)) == 0) {
-            char* endpoint;
-            zsock_recv(DATA_PTR(zactor), "s", &endpoint);
-            mrb_assert(endpoint);
-            mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@pull_endpoint"), mrb_str_new_cstr(mrb, endpoint));
-            if (zsock_connect(DATA_PTR(push), "%s", endpoint) == -1) {
-                zsys_warning("could not connect pull to %s", endpoint);
-                zstr_free(&endpoint);
-                mrb_sys_fail(mrb, "zsock_connect");
-            }
-            zstr_free(&endpoint);
-        }
-        else
-            mrb_sys_fail(mrb, "zsock_send");
-    }
-    if (pub_endpoint) {
-        if (zsock_send(DATA_PTR(zactor), "ss", "BIND PUB", pub_endpoint) == 0 && zsock_wait(DATA_PTR(zactor)) == 0) {
-            char* endpoint;
-            zsock_recv(DATA_PTR(zactor), "s", &endpoint);
-            mrb_iv_set(mrb, self, mrb_intern_lit(mrb, "@pub_endpoint"), mrb_str_new_cstr(mrb, endpoint));
-            zstr_free(&endpoint);
-        }
-        else
-            mrb_sys_fail(mrb, "zsock_send");
-    }
-
-    return self;
-}
-
 void mrb_mruby_actor_gem_init(mrb_state* mrb)
 {
     struct RClass* mrb_actor_class;
 
     mrb_actor_class = mrb_define_class(mrb, "Actor", mrb->object_class);
-    mrb_define_method(mrb, mrb_actor_class, "initialize", mrb_actor_initialize, (MRB_ARGS_REQ(1) | MRB_ARGS_REST()));
+    mrb_define_const(mrb, mrb_actor_class, "ZACTOR_FN", mrb_cptr_value(mrb, mrb_zactor_fn));
 
 #include "./mrb_actor_message_gem_init.h"
 }

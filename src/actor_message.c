@@ -1066,7 +1066,3 @@ actor_message_test (bool verbose)
     printf ("OK\n");
     return 0;
 }
-
-//  zproto_codec_mruby.gsl
-//  Generates a codec for a protocol specification.
-

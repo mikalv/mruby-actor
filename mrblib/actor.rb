@@ -2,6 +2,36 @@ class Actor
   class Error < StandardError; end
   class ProtocolError < Error; end
 
+  def initialize(options = {})
+    @dealer = CZMQ::Zsock.new ZMQ::DEALER
+    @push = CZMQ::Zsock.new ZMQ::PUSH
+    @actor_message = ActorMessage.new
+    @zactor = CZMQ::Zactor.new(ZACTOR_FN, options[:mrb_file])
+    router_endpoint = options.fetch(:router_endpoint) {"inproc://#{object_id}_router"}
+    @zactor.sendx("BIND ROUTER", router_endpoint)
+    if @zactor.wait == 0
+      @router_endpoint = CZMQ::Zframe.recv(@zactor).to_str
+      @dealer.connect(@router_endpoint)
+    else
+      raise "could not bind router to #{router_endpoint}"
+    end
+    pull_endpoint = options.fetch(:pull_endpoint) {"inproc://#{object_id}_pull"}
+    @zactor.sendx("BIND PULL", pull_endpoint)
+    if @zactor.wait == 0
+      @pull_endpoint = CZMQ::Zframe.recv(@zactor).to_str
+      @push.connect(@pull_endpoint)
+    else
+      raise "could not bind pull to #{pull_endpoint}"
+    end
+    pub_endpoint = options.fetch(:pub_endpoint) {"inproc://#{object_id}_pub"}
+    @zactor.sendx("BIND PUB", pub_endpoint)
+    if @zactor.wait == 0
+      @pub_endpoint = CZMQ::Zframe.recv(@zactor).to_str
+    else
+      raise "could not bind pub to #{pub_endpoint}"
+    end
+  end
+
   def init(mrb_class, *args)
     @actor_message.id = ActorMessage::INITIALIZE
     @actor_message.mrb_class = String(mrb_class)
