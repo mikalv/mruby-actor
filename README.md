@@ -14,7 +14,7 @@ end
 ```
 ---------
 ```ruby
-actor = Actor.new('worker.rb', 'inproc://worker_router', 'inproc://worker_pull', 'tcp://127.0.0.1:*')
+actor = Actor.new(mrb_file: 'worker.rb')
 
 worker = actor.init('Worker')
 
