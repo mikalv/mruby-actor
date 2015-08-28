@@ -1,6 +1,6 @@
 The following ABNF grammar defines the mruby actor messages:
 
-    actor_message   = *( INITIALIZE | INITIALIZE-OK | SEND-MESSAGE | SEND-OK | ASYNC-SEND-MESSAGE | ASYNC-SEND-OK | ASYNC-ERROR | ERROR )
+    actor_message   = *( INITIALIZE | INITIALIZE-OK | SEND-MESSAGE | SEND-OK | ERROR | ASYNC-SEND-MESSAGE | ASYNC-SEND-OK | ASYNC-ERROR )
 
     ;  No description                                                        
 
@@ -28,28 +28,30 @@ The following ABNF grammar defines the mruby actor messages:
 
     ;  No description                                                        
 
-    ASYNC-SEND-MESSAGE = signature %d5 uuid object_id method args
-    uuid            = uuid                  ; 
-    object_id       = number-8              ; 
-    method          = string                ; 
-    args            = chunk                 ; 
-
-    ;  No description                                                        
-
-    ASYNC-SEND-OK   = signature %d6 uuid result
-    uuid            = uuid                  ; 
-    result          = chunk                 ; 
-
-    ;  No description                                                        
-
-    ASYNC-ERROR     = signature %d7 uuid mrb_class error
-    uuid            = uuid                  ; 
+    ERROR           = signature %d5 mrb_class error
     mrb_class       = string                ; 
     error           = string                ; 
 
     ;  No description                                                        
 
-    ERROR           = signature %d8 mrb_class error
+    ASYNC-SEND-MESSAGE = signature %d6 object_id uuid method args
+    object_id       = number-8              ; 
+    uuid            = uuid                  ; 
+    method          = string                ; 
+    args            = chunk                 ; 
+
+    ;  No description                                                        
+
+    ASYNC-SEND-OK   = signature %d7 object_id uuid result
+    object_id       = number-8              ; 
+    uuid            = uuid                  ; 
+    result          = chunk                 ; 
+
+    ;  No description                                                        
+
+    ASYNC-ERROR     = signature %d8 object_id uuid mrb_class error
+    object_id       = number-8              ; 
+    uuid            = uuid                  ; 
     mrb_class       = string                ; 
     error           = string                ; 
 

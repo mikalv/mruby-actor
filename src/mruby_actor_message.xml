@@ -23,27 +23,28 @@
     <field name = "result" type = "chunk" />
   </message>
 
-  <message name = "async send message" id = "5">
-    <field name = "uuid" type = "uuid" />
+  <message name = "error" id = "5">
+    <field name = "mrb_class" type = "string" />
+    <field name = "error" type = "string" />
+  </message>
+
+  <message name = "async send message" id = "6">
     <field name = "object_id" type = "number" size = "8" />
+    <field name = "uuid" type = "uuid" />
     <field name = "method" type = "string" />
     <field name = "args" type = "chunk" />
   </message>
 
-  <message name = "async send ok" id = "6">
+  <message name = "async send ok" id = "7">
+    <field name = "object_id" type = "number" size = "8" />
     <field name = "uuid" type = "uuid" />
     <field name = "result" type = "chunk" />
   </message>
 
-  <message name = "async error" id = "7">
+  <message name = "async error" id = "8">
+    <field name = "object_id" type = "number" size = "8" />
     <field name = "uuid" type = "uuid" />
     <field name = "mrb_class" type = "string" />
     <field name = "error" type = "string" />
   </message>
-
-  <message name = "error" id = "8">
-    <field name = "mrb_class" type = "string" />
-    <field name = "error" type = "string" />
-  </message>
-
 </class>

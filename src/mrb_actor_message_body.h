@@ -364,6 +364,35 @@ mrb_actor_message_set_result (mrb_state *mrb, mrb_value mrb_self)
 }
 
 //  --------------------------------------------------------------------------
+//  Get the error field
+
+static mrb_value
+mrb_actor_message_error (mrb_state *mrb, mrb_value mrb_self)
+{
+    actor_message_t *self = (actor_message_t *) DATA_PTR (mrb_self);
+
+    const char *error = actor_message_error (self);
+
+    return mrb_str_new_static (mrb, error, strlen (error));
+}
+
+// Set the error field
+
+static mrb_value
+mrb_actor_message_set_error (mrb_state *mrb, mrb_value mrb_self)
+{
+    char *error;
+
+    mrb_get_args (mrb, "z", &error);
+
+    actor_message_t *self = (actor_message_t *) DATA_PTR (mrb_self);
+
+    actor_message_set_error (self, error);
+
+    return mrb_self;
+}
+
+//  --------------------------------------------------------------------------
 //  Get the uuid field
 
 static mrb_value
@@ -408,35 +437,6 @@ mrb_actor_message_create_uuid (mrb_state *mrb, mrb_value mrb_self)
     zuuid_t *uuid = zuuid_new ();
     actor_message_set_uuid (self, uuid);
     zuuid_destroy (&uuid);
-
-    return mrb_self;
-}
-
-//  --------------------------------------------------------------------------
-//  Get the error field
-
-static mrb_value
-mrb_actor_message_error (mrb_state *mrb, mrb_value mrb_self)
-{
-    actor_message_t *self = (actor_message_t *) DATA_PTR (mrb_self);
-
-    const char *error = actor_message_error (self);
-
-    return mrb_str_new_static (mrb, error, strlen (error));
-}
-
-// Set the error field
-
-static mrb_value
-mrb_actor_message_set_error (mrb_state *mrb, mrb_value mrb_self)
-{
-    char *error;
-
-    mrb_get_args (mrb, "z", &error);
-
-    actor_message_t *self = (actor_message_t *) DATA_PTR (mrb_self);
-
-    actor_message_set_error (self, error);
 
     return mrb_self;
 }

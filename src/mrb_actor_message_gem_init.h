@@ -1,8 +1,11 @@
     struct RClass *actor_message_class;
 
+    int ai = mrb_gc_arena_save (mrb);
     actor_message_class = mrb_define_class (mrb, "ActorMessage", mrb->object_class);
     MRB_SET_INSTANCE_TT(actor_message_class, MRB_TT_DATA);
-    int ai = mrb_gc_arena_save (mrb);
+    mrb_gc_arena_restore (mrb, ai);
+    mrb_define_const (mrb, actor_message_class, "SIGNATURE", mrb_fixnum_value(7));
+    mrb_gc_arena_restore (mrb, ai);
     mrb_define_const (mrb, actor_message_class, "INITIALIZE", mrb_fixnum_value (1));
     mrb_gc_arena_restore (mrb, ai);
     mrb_define_const (mrb, actor_message_class, "INITIALIZE_OK", mrb_fixnum_value (2));
@@ -11,13 +14,13 @@
     mrb_gc_arena_restore (mrb, ai);
     mrb_define_const (mrb, actor_message_class, "SEND_OK", mrb_fixnum_value (4));
     mrb_gc_arena_restore (mrb, ai);
-    mrb_define_const (mrb, actor_message_class, "ASYNC_SEND_MESSAGE", mrb_fixnum_value (5));
+    mrb_define_const (mrb, actor_message_class, "ERROR", mrb_fixnum_value (5));
     mrb_gc_arena_restore (mrb, ai);
-    mrb_define_const (mrb, actor_message_class, "ASYNC_SEND_OK", mrb_fixnum_value (6));
+    mrb_define_const (mrb, actor_message_class, "ASYNC_SEND_MESSAGE", mrb_fixnum_value (6));
     mrb_gc_arena_restore (mrb, ai);
-    mrb_define_const (mrb, actor_message_class, "ASYNC_ERROR", mrb_fixnum_value (7));
+    mrb_define_const (mrb, actor_message_class, "ASYNC_SEND_OK", mrb_fixnum_value (7));
     mrb_gc_arena_restore (mrb, ai);
-    mrb_define_const (mrb, actor_message_class, "ERROR", mrb_fixnum_value (8));
+    mrb_define_const (mrb, actor_message_class, "ASYNC_ERROR", mrb_fixnum_value (8));
     mrb_gc_arena_restore (mrb, ai);
     mrb_define_method (mrb, actor_message_class, "initialize", mrb_actor_message_initialize, MRB_ARGS_NONE());
     mrb_define_method (mrb, actor_message_class, "recv", mrb_actor_message_recv, MRB_ARGS_REQ(1));
@@ -38,8 +41,8 @@
     mrb_define_method (mrb, actor_message_class, "method=", mrb_actor_message_set_method, MRB_ARGS_REQ(1));
     mrb_define_method (mrb, actor_message_class, "result", mrb_actor_message_result, MRB_ARGS_NONE());
     mrb_define_method (mrb, actor_message_class, "result=", mrb_actor_message_set_result, MRB_ARGS_REQ(1));
+    mrb_define_method (mrb, actor_message_class, "error", mrb_actor_message_error, MRB_ARGS_NONE());
+    mrb_define_method (mrb, actor_message_class, "error=", mrb_actor_message_set_error, MRB_ARGS_REQ(1));
     mrb_define_method (mrb, actor_message_class, "uuid", mrb_actor_message_uuid, MRB_ARGS_NONE());
     mrb_define_method (mrb, actor_message_class, "uuid=", mrb_actor_message_set_uuid, MRB_ARGS_REQ(1));
     mrb_define_method (mrb, actor_message_class, "create_uuid", mrb_actor_message_create_uuid, MRB_ARGS_NONE());
-    mrb_define_method (mrb, actor_message_class, "error", mrb_actor_message_error, MRB_ARGS_NONE());
-    mrb_define_method (mrb, actor_message_class, "error=", mrb_actor_message_set_error, MRB_ARGS_REQ(1));

@@ -2,33 +2,39 @@ class Actor
   class Error < StandardError; end
   class ProtocolError < Error; end
 
+  attr_reader :pub_endpoint
+
   def initialize(options = {})
     @dealer = CZMQ::Zsock.new ZMQ::DEALER
     @push = CZMQ::Zsock.new ZMQ::PUSH
     @actor_message = ActorMessage.new
     @zactor = CZMQ::Zactor.new(ZACTOR_FN, options[:mrb_file])
-    router_endpoint = options.fetch(:router_endpoint) {"inproc://#{object_id}_router"}
+    @name = options.fetch(:name) {String(object_id)}
+    router_endpoint = options.fetch(:router_endpoint) {"inproc://#{@name}_router"}
     @zactor.sendx("BIND ROUTER", router_endpoint)
     if @zactor.wait == 0
       @router_endpoint = CZMQ::Zframe.recv(@zactor).to_str
       @dealer.connect(@router_endpoint)
     else
-      raise "could not bind router to #{router_endpoint}"
+      errno = Integer(CZMQ::Zframe.recv(@zactor).to_str(true))
+      raise SystemCallError._sys_fail(errno, "could not bind router to #{router_endpoint}")
     end
-    pull_endpoint = options.fetch(:pull_endpoint) {"inproc://#{object_id}_pull"}
+    pull_endpoint = options.fetch(:pull_endpoint) {"inproc://#{@name}_pull"}
     @zactor.sendx("BIND PULL", pull_endpoint)
     if @zactor.wait == 0
       @pull_endpoint = CZMQ::Zframe.recv(@zactor).to_str
       @push.connect(@pull_endpoint)
     else
-      raise "could not bind pull to #{pull_endpoint}"
+      errno = Integer(CZMQ::Zframe.recv(@zactor).to_str(true))
+      raise SystemCallError._sys_fail(errno, "could not bind pull to #{pull_endpoint}")
     end
-    pub_endpoint = options.fetch(:pub_endpoint) {"inproc://#{object_id}_pub"}
+    pub_endpoint = options.fetch(:pub_endpoint) {"inproc://#{@name}_pub"}
     @zactor.sendx("BIND PUB", pub_endpoint)
     if @zactor.wait == 0
       @pub_endpoint = CZMQ::Zframe.recv(@zactor).to_str
     else
-      raise "could not bind pub to #{pub_endpoint}"
+      errno = Integer(CZMQ::Zframe.recv(@zactor).to_str(true))
+      raise SystemCallError._sys_fail(errno, "could not bind pub to #{pub_endpoint}")
     end
   end
 
@@ -67,8 +73,8 @@ class Actor
 
   def async_send(object_id, method, *args)
     @actor_message.id = ActorMessage::ASYNC_SEND_MESSAGE
-    @actor_message.create_uuid
     @actor_message.object_id = Integer(object_id)
+    @actor_message.create_uuid
     @actor_message.method = String(method)
     @actor_message.args = args.to_msgpack
     @actor_message.send(@push)

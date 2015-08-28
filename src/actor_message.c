@@ -36,8 +36,8 @@ struct _actor_message_t {
     uint64_t object_id;                 //  object_id
     char method [256];                  //  method
     zchunk_t *result;                   //  result
-    zuuid_t *uuid;                      //  uuid
     char error [256];                   //  error
+    zuuid_t *uuid;                      //  uuid
 };
 
 //  --------------------------------------------------------------------------
@@ -313,7 +313,13 @@ actor_message_recv (actor_message_t *self, zsock_t *input)
             }
             break;
 
+        case ACTOR_MESSAGE_ERROR:
+            GET_STRING (self->mrb_class);
+            GET_STRING (self->error);
+            break;
+
         case ACTOR_MESSAGE_ASYNC_SEND_MESSAGE:
+            GET_NUMBER8 (self->object_id);
             if (self->needle + ZUUID_LEN > (self->ceiling)) {
                 zsys_warning ("actor_message: uuid is invalid");
                 goto malformed;
@@ -321,7 +327,6 @@ actor_message_recv (actor_message_t *self, zsock_t *input)
             zuuid_destroy (&self->uuid);
             self->uuid = zuuid_new_from (self->needle);
             self->needle += ZUUID_LEN;
-            GET_NUMBER8 (self->object_id);
             GET_STRING (self->method);
             {
                 size_t chunk_size;
@@ -337,6 +342,7 @@ actor_message_recv (actor_message_t *self, zsock_t *input)
             break;
 
         case ACTOR_MESSAGE_ASYNC_SEND_OK:
+            GET_NUMBER8 (self->object_id);
             if (self->needle + ZUUID_LEN > (self->ceiling)) {
                 zsys_warning ("actor_message: uuid is invalid");
                 goto malformed;
@@ -358,6 +364,7 @@ actor_message_recv (actor_message_t *self, zsock_t *input)
             break;
 
         case ACTOR_MESSAGE_ASYNC_ERROR:
+            GET_NUMBER8 (self->object_id);
             if (self->needle + ZUUID_LEN > (self->ceiling)) {
                 zsys_warning ("actor_message: uuid is invalid");
                 goto malformed;
@@ -365,11 +372,6 @@ actor_message_recv (actor_message_t *self, zsock_t *input)
             zuuid_destroy (&self->uuid);
             self->uuid = zuuid_new_from (self->needle);
             self->needle += ZUUID_LEN;
-            GET_STRING (self->mrb_class);
-            GET_STRING (self->error);
-            break;
-
-        case ACTOR_MESSAGE_ERROR:
             GET_STRING (self->mrb_class);
             GET_STRING (self->error);
             break;
@@ -426,26 +428,28 @@ actor_message_send (actor_message_t *self, zsock_t *output)
             if (self->result)
                 frame_size += zchunk_size (self->result);
             break;
+        case ACTOR_MESSAGE_ERROR:
+            frame_size += 1 + strlen (self->mrb_class);
+            frame_size += 1 + strlen (self->error);
+            break;
         case ACTOR_MESSAGE_ASYNC_SEND_MESSAGE:
-            frame_size += ZUUID_LEN;    //  uuid
             frame_size += 8;            //  object_id
+            frame_size += ZUUID_LEN;    //  uuid
             frame_size += 1 + strlen (self->method);
             frame_size += 4;            //  Size is 4 octets
             if (self->args)
                 frame_size += zchunk_size (self->args);
             break;
         case ACTOR_MESSAGE_ASYNC_SEND_OK:
+            frame_size += 8;            //  object_id
             frame_size += ZUUID_LEN;    //  uuid
             frame_size += 4;            //  Size is 4 octets
             if (self->result)
                 frame_size += zchunk_size (self->result);
             break;
         case ACTOR_MESSAGE_ASYNC_ERROR:
+            frame_size += 8;            //  object_id
             frame_size += ZUUID_LEN;    //  uuid
-            frame_size += 1 + strlen (self->mrb_class);
-            frame_size += 1 + strlen (self->error);
-            break;
-        case ACTOR_MESSAGE_ERROR:
             frame_size += 1 + strlen (self->mrb_class);
             frame_size += 1 + strlen (self->error);
             break;
@@ -502,13 +506,18 @@ actor_message_send (actor_message_t *self, zsock_t *output)
                 PUT_NUMBER4 (0);    //  Empty chunk
             break;
 
+        case ACTOR_MESSAGE_ERROR:
+            PUT_STRING (self->mrb_class);
+            PUT_STRING (self->error);
+            break;
+
         case ACTOR_MESSAGE_ASYNC_SEND_MESSAGE:
+            PUT_NUMBER8 (self->object_id);
             if (self->uuid)
                 zuuid_export (self->uuid, self->needle);
             else
                 memset (self->needle, 0, ZUUID_LEN);
             self->needle += ZUUID_LEN;
-            PUT_NUMBER8 (self->object_id);
             PUT_STRING (self->method);
             if (self->args) {
                 PUT_NUMBER4 (zchunk_size (self->args));
@@ -522,6 +531,7 @@ actor_message_send (actor_message_t *self, zsock_t *output)
             break;
 
         case ACTOR_MESSAGE_ASYNC_SEND_OK:
+            PUT_NUMBER8 (self->object_id);
             if (self->uuid)
                 zuuid_export (self->uuid, self->needle);
             else
@@ -539,16 +549,12 @@ actor_message_send (actor_message_t *self, zsock_t *output)
             break;
 
         case ACTOR_MESSAGE_ASYNC_ERROR:
+            PUT_NUMBER8 (self->object_id);
             if (self->uuid)
                 zuuid_export (self->uuid, self->needle);
             else
                 memset (self->needle, 0, ZUUID_LEN);
             self->needle += ZUUID_LEN;
-            PUT_STRING (self->mrb_class);
-            PUT_STRING (self->error);
-            break;
-
-        case ACTOR_MESSAGE_ERROR:
             PUT_STRING (self->mrb_class);
             PUT_STRING (self->error);
             break;
@@ -592,20 +598,27 @@ actor_message_print (actor_message_t *self)
             zsys_debug ("    result=[ ... ]");
             break;
 
+        case ACTOR_MESSAGE_ERROR:
+            zsys_debug ("ACTOR_MESSAGE_ERROR:");
+            zsys_debug ("    mrb_class='%s'", self->mrb_class);
+            zsys_debug ("    error='%s'", self->error);
+            break;
+
         case ACTOR_MESSAGE_ASYNC_SEND_MESSAGE:
             zsys_debug ("ACTOR_MESSAGE_ASYNC_SEND_MESSAGE:");
+            zsys_debug ("    object_id=%ld", (long) self->object_id);
             zsys_debug ("    uuid=");
             if (self->uuid)
                 zsys_debug ("        %s", zuuid_str_canonical (self->uuid));
             else
                 zsys_debug ("        (NULL)");
-            zsys_debug ("    object_id=%ld", (long) self->object_id);
             zsys_debug ("    method='%s'", self->method);
             zsys_debug ("    args=[ ... ]");
             break;
 
         case ACTOR_MESSAGE_ASYNC_SEND_OK:
             zsys_debug ("ACTOR_MESSAGE_ASYNC_SEND_OK:");
+            zsys_debug ("    object_id=%ld", (long) self->object_id);
             zsys_debug ("    uuid=");
             if (self->uuid)
                 zsys_debug ("        %s", zuuid_str_canonical (self->uuid));
@@ -616,17 +629,12 @@ actor_message_print (actor_message_t *self)
 
         case ACTOR_MESSAGE_ASYNC_ERROR:
             zsys_debug ("ACTOR_MESSAGE_ASYNC_ERROR:");
+            zsys_debug ("    object_id=%ld", (long) self->object_id);
             zsys_debug ("    uuid=");
             if (self->uuid)
                 zsys_debug ("        %s", zuuid_str_canonical (self->uuid));
             else
                 zsys_debug ("        (NULL)");
-            zsys_debug ("    mrb_class='%s'", self->mrb_class);
-            zsys_debug ("    error='%s'", self->error);
-            break;
-
-        case ACTOR_MESSAGE_ERROR:
-            zsys_debug ("ACTOR_MESSAGE_ERROR:");
             zsys_debug ("    mrb_class='%s'", self->mrb_class);
             zsys_debug ("    error='%s'", self->error);
             break;
@@ -690,6 +698,9 @@ actor_message_command (actor_message_t *self)
         case ACTOR_MESSAGE_SEND_OK:
             return ("SEND_OK");
             break;
+        case ACTOR_MESSAGE_ERROR:
+            return ("ERROR");
+            break;
         case ACTOR_MESSAGE_ASYNC_SEND_MESSAGE:
             return ("ASYNC_SEND_MESSAGE");
             break;
@@ -698,9 +709,6 @@ actor_message_command (actor_message_t *self)
             break;
         case ACTOR_MESSAGE_ASYNC_ERROR:
             return ("ASYNC_ERROR");
-            break;
-        case ACTOR_MESSAGE_ERROR:
-            return ("ERROR");
             break;
     }
     return "?";
@@ -835,6 +843,28 @@ actor_message_set_result (actor_message_t *self, zchunk_t **chunk_p)
 
 
 //  --------------------------------------------------------------------------
+//  Get/set the error field
+
+const char *
+actor_message_error (actor_message_t *self)
+{
+    assert (self);
+    return self->error;
+}
+
+void
+actor_message_set_error (actor_message_t *self, const char *value)
+{
+    assert (self);
+    assert (value);
+    if (value == self->error)
+        return;
+    strncpy (self->error, value, 255);
+    self->error [255] = 0;
+}
+
+
+//  --------------------------------------------------------------------------
 //  Get/set the uuid field
 zuuid_t *
 actor_message_uuid (actor_message_t *self)
@@ -859,28 +889,6 @@ actor_message_get_uuid (actor_message_t *self)
     zuuid_t *uuid = self->uuid;
     self->uuid = NULL;
     return uuid;
-}
-
-
-//  --------------------------------------------------------------------------
-//  Get/set the error field
-
-const char *
-actor_message_error (actor_message_t *self)
-{
-    assert (self);
-    return self->error;
-}
-
-void
-actor_message_set_error (actor_message_t *self, const char *value)
-{
-    assert (self);
-    assert (value);
-    if (value == self->error)
-        return;
-    strncpy (self->error, value, 255);
-    self->error [255] = 0;
 }
 
 
@@ -980,69 +988,6 @@ actor_message_test (bool verbose)
         if (instance == 1)
             zchunk_destroy (&send_ok_result);
     }
-    actor_message_set_id (self, ACTOR_MESSAGE_ASYNC_SEND_MESSAGE);
-
-    zuuid_t *async_send_message_uuid = zuuid_new ();
-    actor_message_set_uuid (self, async_send_message_uuid);
-    actor_message_set_object_id (self, 123);
-    actor_message_set_method (self, "Life is short but Now lasts for ever");
-    zchunk_t *async_send_message_args = zchunk_new ("Captcha Diem", 12);
-    actor_message_set_args (self, &async_send_message_args);
-    //  Send twice
-    actor_message_send (self, output);
-    actor_message_send (self, output);
-
-    for (instance = 0; instance < 2; instance++) {
-        actor_message_recv (self, input);
-        assert (actor_message_routing_id (self));
-        assert (zuuid_eq (async_send_message_uuid, zuuid_data (actor_message_uuid (self))));
-        if (instance == 1)
-            zuuid_destroy (&async_send_message_uuid);
-        assert (actor_message_object_id (self) == 123);
-        assert (streq (actor_message_method (self), "Life is short but Now lasts for ever"));
-        assert (memcmp (zchunk_data (actor_message_args (self)), "Captcha Diem", 12) == 0);
-        if (instance == 1)
-            zchunk_destroy (&async_send_message_args);
-    }
-    actor_message_set_id (self, ACTOR_MESSAGE_ASYNC_SEND_OK);
-
-    zuuid_t *async_send_ok_uuid = zuuid_new ();
-    actor_message_set_uuid (self, async_send_ok_uuid);
-    zchunk_t *async_send_ok_result = zchunk_new ("Captcha Diem", 12);
-    actor_message_set_result (self, &async_send_ok_result);
-    //  Send twice
-    actor_message_send (self, output);
-    actor_message_send (self, output);
-
-    for (instance = 0; instance < 2; instance++) {
-        actor_message_recv (self, input);
-        assert (actor_message_routing_id (self));
-        assert (zuuid_eq (async_send_ok_uuid, zuuid_data (actor_message_uuid (self))));
-        if (instance == 1)
-            zuuid_destroy (&async_send_ok_uuid);
-        assert (memcmp (zchunk_data (actor_message_result (self)), "Captcha Diem", 12) == 0);
-        if (instance == 1)
-            zchunk_destroy (&async_send_ok_result);
-    }
-    actor_message_set_id (self, ACTOR_MESSAGE_ASYNC_ERROR);
-
-    zuuid_t *async_error_uuid = zuuid_new ();
-    actor_message_set_uuid (self, async_error_uuid);
-    actor_message_set_mrb_class (self, "Life is short but Now lasts for ever");
-    actor_message_set_error (self, "Life is short but Now lasts for ever");
-    //  Send twice
-    actor_message_send (self, output);
-    actor_message_send (self, output);
-
-    for (instance = 0; instance < 2; instance++) {
-        actor_message_recv (self, input);
-        assert (actor_message_routing_id (self));
-        assert (zuuid_eq (async_error_uuid, zuuid_data (actor_message_uuid (self))));
-        if (instance == 1)
-            zuuid_destroy (&async_error_uuid);
-        assert (streq (actor_message_mrb_class (self), "Life is short but Now lasts for ever"));
-        assert (streq (actor_message_error (self), "Life is short but Now lasts for ever"));
-    }
     actor_message_set_id (self, ACTOR_MESSAGE_ERROR);
 
     actor_message_set_mrb_class (self, "Life is short but Now lasts for ever");
@@ -1054,6 +999,73 @@ actor_message_test (bool verbose)
     for (instance = 0; instance < 2; instance++) {
         actor_message_recv (self, input);
         assert (actor_message_routing_id (self));
+        assert (streq (actor_message_mrb_class (self), "Life is short but Now lasts for ever"));
+        assert (streq (actor_message_error (self), "Life is short but Now lasts for ever"));
+    }
+    actor_message_set_id (self, ACTOR_MESSAGE_ASYNC_SEND_MESSAGE);
+
+    actor_message_set_object_id (self, 123);
+    zuuid_t *async_send_message_uuid = zuuid_new ();
+    actor_message_set_uuid (self, async_send_message_uuid);
+    actor_message_set_method (self, "Life is short but Now lasts for ever");
+    zchunk_t *async_send_message_args = zchunk_new ("Captcha Diem", 12);
+    actor_message_set_args (self, &async_send_message_args);
+    //  Send twice
+    actor_message_send (self, output);
+    actor_message_send (self, output);
+
+    for (instance = 0; instance < 2; instance++) {
+        actor_message_recv (self, input);
+        assert (actor_message_routing_id (self));
+        assert (actor_message_object_id (self) == 123);
+        assert (zuuid_eq (async_send_message_uuid, zuuid_data (actor_message_uuid (self))));
+        if (instance == 1)
+            zuuid_destroy (&async_send_message_uuid);
+        assert (streq (actor_message_method (self), "Life is short but Now lasts for ever"));
+        assert (memcmp (zchunk_data (actor_message_args (self)), "Captcha Diem", 12) == 0);
+        if (instance == 1)
+            zchunk_destroy (&async_send_message_args);
+    }
+    actor_message_set_id (self, ACTOR_MESSAGE_ASYNC_SEND_OK);
+
+    actor_message_set_object_id (self, 123);
+    zuuid_t *async_send_ok_uuid = zuuid_new ();
+    actor_message_set_uuid (self, async_send_ok_uuid);
+    zchunk_t *async_send_ok_result = zchunk_new ("Captcha Diem", 12);
+    actor_message_set_result (self, &async_send_ok_result);
+    //  Send twice
+    actor_message_send (self, output);
+    actor_message_send (self, output);
+
+    for (instance = 0; instance < 2; instance++) {
+        actor_message_recv (self, input);
+        assert (actor_message_routing_id (self));
+        assert (actor_message_object_id (self) == 123);
+        assert (zuuid_eq (async_send_ok_uuid, zuuid_data (actor_message_uuid (self))));
+        if (instance == 1)
+            zuuid_destroy (&async_send_ok_uuid);
+        assert (memcmp (zchunk_data (actor_message_result (self)), "Captcha Diem", 12) == 0);
+        if (instance == 1)
+            zchunk_destroy (&async_send_ok_result);
+    }
+    actor_message_set_id (self, ACTOR_MESSAGE_ASYNC_ERROR);
+
+    actor_message_set_object_id (self, 123);
+    zuuid_t *async_error_uuid = zuuid_new ();
+    actor_message_set_uuid (self, async_error_uuid);
+    actor_message_set_mrb_class (self, "Life is short but Now lasts for ever");
+    actor_message_set_error (self, "Life is short but Now lasts for ever");
+    //  Send twice
+    actor_message_send (self, output);
+    actor_message_send (self, output);
+
+    for (instance = 0; instance < 2; instance++) {
+        actor_message_recv (self, input);
+        assert (actor_message_routing_id (self));
+        assert (actor_message_object_id (self) == 123);
+        assert (zuuid_eq (async_error_uuid, zuuid_data (actor_message_uuid (self))));
+        if (instance == 1)
+            zuuid_destroy (&async_error_uuid);
         assert (streq (actor_message_mrb_class (self), "Life is short but Now lasts for ever"));
         assert (streq (actor_message_error (self), "Life is short but Now lasts for ever"));
     }

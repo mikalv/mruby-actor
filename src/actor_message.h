@@ -35,22 +35,24 @@
     SEND_OK - 
         result              chunk       
 
+    ERROR - 
+        mrb_class           string      
+        error               string      
+
     ASYNC_SEND_MESSAGE - 
-        uuid                uuid        
         object_id           number 8    
+        uuid                uuid        
         method              string      
         args                chunk       
 
     ASYNC_SEND_OK - 
+        object_id           number 8    
         uuid                uuid        
         result              chunk       
 
     ASYNC_ERROR - 
+        object_id           number 8    
         uuid                uuid        
-        mrb_class           string      
-        error               string      
-
-    ERROR - 
         mrb_class           string      
         error               string      
 */
@@ -60,10 +62,10 @@
 #define ACTOR_MESSAGE_INITIALIZE_OK         2
 #define ACTOR_MESSAGE_SEND_MESSAGE          3
 #define ACTOR_MESSAGE_SEND_OK               4
-#define ACTOR_MESSAGE_ASYNC_SEND_MESSAGE    5
-#define ACTOR_MESSAGE_ASYNC_SEND_OK         6
-#define ACTOR_MESSAGE_ASYNC_ERROR           7
-#define ACTOR_MESSAGE_ERROR                 8
+#define ACTOR_MESSAGE_ERROR                 5
+#define ACTOR_MESSAGE_ASYNC_SEND_MESSAGE    6
+#define ACTOR_MESSAGE_ASYNC_SEND_OK         7
+#define ACTOR_MESSAGE_ASYNC_ERROR           8
 
 #include <czmq.h>
 
@@ -151,6 +153,12 @@ zchunk_t *
 void
     actor_message_set_result (actor_message_t *self, zchunk_t **chunk_p);
 
+//  Get/set the error field
+const char *
+    actor_message_error (actor_message_t *self);
+void
+    actor_message_set_error (actor_message_t *self, const char *value);
+
 //  Get/set the uuid field
 zuuid_t *
     actor_message_uuid (actor_message_t *self);
@@ -159,12 +167,6 @@ void
 //  Get the uuid field and transfer ownership to caller
 zuuid_t *
     actor_message_get_uuid (actor_message_t *self);
-
-//  Get/set the error field
-const char *
-    actor_message_error (actor_message_t *self);
-void
-    actor_message_set_error (actor_message_t *self, const char *value);
 
 //  Self test of this class
 int

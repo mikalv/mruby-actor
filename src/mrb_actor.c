@@ -42,6 +42,7 @@ s_self_destroy(self_t** self_p)
 static int
 mrb_actor_pipe_reader(zloop_t* reactor, zsock_t* pipe, void* args)
 {
+    errno = 0;
     self_t* self = (self_t*)args;
     int rc = 0;
     zmsg_t* msg = zmsg_recv(pipe);
@@ -56,6 +57,7 @@ mrb_actor_pipe_reader(zloop_t* reactor, zsock_t* pipe, void* args)
         char* endpoint = zmsg_popstr(msg);
         if (zsock_bind(self->router, "%s", endpoint) == -1) {
             zsock_signal(pipe, 1);
+            zsock_send(pipe, "i", errno);
         }
         else {
             zsock_signal(pipe, 0);
@@ -67,6 +69,7 @@ mrb_actor_pipe_reader(zloop_t* reactor, zsock_t* pipe, void* args)
         char* endpoint = zmsg_popstr(msg);
         if (zsock_bind(self->pull, "%s", endpoint) == -1) {
             zsock_signal(pipe, 1);
+            zsock_send(pipe, "i", errno);
         }
         else {
             zsock_signal(pipe, 0);
@@ -78,6 +81,7 @@ mrb_actor_pipe_reader(zloop_t* reactor, zsock_t* pipe, void* args)
         char* endpoint = zmsg_popstr(msg);
         if (zsock_bind(self->pub, "%s", endpoint) == -1) {
             zsock_signal(pipe, 1);
+            zsock_send(pipe, "i", errno);
         }
         else {
             zsock_signal(pipe, 0);
@@ -345,12 +349,40 @@ mrb_zactor_fn(zsock_t* pipe, void* mrb_file)
     zsock_signal(pipe, 0);
 }
 
+static mrb_value
+mrb_actor_gen_sub(mrb_state* mrb, mrb_value self)
+{
+    mrb_int signature, id, object_id;
+
+    mrb_get_args(mrb, "iii", &signature, &id, &object_id);
+
+    mrb_value sub = mrb_str_new(mrb, NULL, 2 + 1 + 8);
+    byte* subscribe = (byte*)RSTRING_PTR(sub);
+    subscribe[0] = (byte)(((0xAAA0 | signature) >> 8) & 255);
+    subscribe[1] = (byte)(((0xAAA0 | signature)) & 255);
+    subscribe += 2;
+    *(byte*)subscribe = id;
+    subscribe++;
+
+    subscribe[0] = (byte)(((object_id) >> 56) & 255);
+    subscribe[1] = (byte)(((object_id) >> 48) & 255);
+    subscribe[2] = (byte)(((object_id) >> 40) & 255);
+    subscribe[3] = (byte)(((object_id) >> 32) & 255);
+    subscribe[4] = (byte)(((object_id) >> 24) & 255);
+    subscribe[5] = (byte)(((object_id) >> 16) & 255);
+    subscribe[6] = (byte)(((object_id) >> 8) & 255);
+    subscribe[7] = (byte)(((object_id)) & 255);
+
+    return sub;
+}
+
 void mrb_mruby_actor_gem_init(mrb_state* mrb)
 {
     struct RClass* mrb_actor_class;
 
     mrb_actor_class = mrb_define_class(mrb, "Actor", mrb->object_class);
     mrb_define_const(mrb, mrb_actor_class, "ZACTOR_FN", mrb_cptr_value(mrb, mrb_zactor_fn));
+    mrb_define_method(mrb, mrb_actor_class, "gen_sub", mrb_actor_gen_sub, MRB_ARGS_REQ(2));
 
 #include "./mrb_actor_message_gem_init.h"
 }
