@@ -9,8 +9,8 @@ class Actor
     @push = CZMQ::Zsock.new ZMQ::PUSH
     @actor_message = ActorMessage.new
     @zactor = CZMQ::Zactor.new(ZACTOR_FN, options[:mrb_file])
-    @name = options.fetch(:name) {String(object_id)}
-    router_endpoint = options.fetch(:router_endpoint) {"inproc://#{@name}_router"}
+    @address = options.fetch(:address) {String(object_id)}
+    router_endpoint = options.fetch(:router_endpoint) {"inproc://#{@address}_router"}
     @zactor.sendx("BIND ROUTER", router_endpoint)
     if @zactor.wait == 0
       @router_endpoint = CZMQ::Zframe.recv(@zactor).to_str
@@ -19,7 +19,7 @@ class Actor
       errno = Integer(CZMQ::Zframe.recv(@zactor).to_str(true))
       raise SystemCallError._sys_fail(errno, "could not bind router to #{router_endpoint}")
     end
-    pull_endpoint = options.fetch(:pull_endpoint) {"inproc://#{@name}_pull"}
+    pull_endpoint = options.fetch(:pull_endpoint) {"inproc://#{@address}_pull"}
     @zactor.sendx("BIND PULL", pull_endpoint)
     if @zactor.wait == 0
       @pull_endpoint = CZMQ::Zframe.recv(@zactor).to_str
@@ -28,7 +28,7 @@ class Actor
       errno = Integer(CZMQ::Zframe.recv(@zactor).to_str(true))
       raise SystemCallError._sys_fail(errno, "could not bind pull to #{pull_endpoint}")
     end
-    pub_endpoint = options.fetch(:pub_endpoint) {"inproc://#{@name}_pub"}
+    pub_endpoint = options.fetch(:pub_endpoint) {"inproc://#{@address}_pub"}
     @zactor.sendx("BIND PUB", pub_endpoint)
     if @zactor.wait == 0
       @pub_endpoint = CZMQ::Zframe.recv(@zactor).to_str

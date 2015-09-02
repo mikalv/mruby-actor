@@ -1,10 +1,9 @@
 #include "./mrb_actor_message_body.h"
-#include <mruby/compile.h>
+#include <mruby/dump.h>
 #include <mruby/variable.h>
 
 typedef struct {
     char* mrb_file;
-    FILE* mrb_file_handle;
     mrb_state* mrb;
     zloop_t* reactor;
     actor_message_t* actor_msg;
@@ -21,10 +20,6 @@ s_self_destroy(self_t** self_p)
     if (*self_p) {
         self_t* self = *self_p;
         zstr_free(&self->mrb_file);
-        if (self->mrb_file_handle) {
-            fclose(self->mrb_file_handle);
-            self->mrb_file_handle = NULL;
-        }
         if (self->mrb) {
             mrb_close(self->mrb);
             self->mrb = NULL;
@@ -278,8 +273,6 @@ s_self_new(zsock_t* pipe, const char* mrb_file)
         assert(strlen(mrb_file) > 0);
         self->mrb_file = strdup(mrb_file);
         if (self->mrb_file)
-            self->mrb_file_handle = fopen(self->mrb_file, "r");
-        if (self->mrb_file_handle)
             self->mrb = mrb_open();
     }
     else {
@@ -293,8 +286,13 @@ s_self_new(zsock_t* pipe, const char* mrb_file)
         MRB_TRY(&c_jmp)
         {
             mrb->jmp = &c_jmp;
-            if (self->mrb_file_handle) {
-                mrb_load_file(mrb, self->mrb_file_handle);
+            if (self->mrb_file) {
+                FILE* fp = fopen(self->mrb_file, "r");
+                if (fp == NULL) {
+                    mrb_sys_fail(mrb, "fopen");
+                }
+                mrb_load_irep_file(mrb, fp);
+                fclose(fp);
                 if (mrb->exc)
                     mrb_exc_raise(mrb, mrb_obj_value(mrb->exc));
             }

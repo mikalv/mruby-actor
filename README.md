@@ -13,8 +13,12 @@ class Worker
 end
 ```
 ---------
+```shell
+mruby/bin/mrbc worker.rb
+```
+--------
 ```ruby
-actor = Actor.new(mrb_file: 'worker.rb')
+actor = Actor.new(mrb_file: 'worker.mrb')
 
 worker = actor.init('Worker')
 
