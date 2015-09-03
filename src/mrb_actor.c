@@ -3,7 +3,6 @@
 #include <mruby/variable.h>
 
 typedef struct {
-    char* mrb_file;
     mrb_state* mrb;
     zloop_t* reactor;
     actor_message_t* actor_msg;
@@ -19,7 +18,6 @@ s_self_destroy(self_t** self_p)
 
     if (*self_p) {
         self_t* self = *self_p;
-        zstr_free(&self->mrb_file);
         if (self->mrb) {
             mrb_close(self->mrb);
             self->mrb = NULL;
@@ -83,6 +81,21 @@ mrb_actor_pipe_reader(zloop_t* reactor, zsock_t* pipe, void* args)
             zsock_send(pipe, "s", zsock_endpoint(self->pub));
         }
         zstr_free(&endpoint);
+    }
+    else if (streq(command, "LOAD STRING")) {
+        char* string = zmsg_popstr(msg);
+        int ai = mrb_gc_arena_save(self->mrb);
+        mrb_load_string(self->mrb, string);
+        if (self->mrb->exc) {
+            mrb_p(self->mrb, mrb_obj_value(self->mrb->exc));
+            self->mrb->exc = NULL;
+        }
+        mrb_gc_arena_restore(self->mrb, ai);
+        zstr_free(&string);
+    }
+    else {
+        zsys_error("invalid command: %s", command);
+        assert(false);
     }
 
     zstr_free(&command);
@@ -263,22 +276,16 @@ static self_t*
 s_self_new(zsock_t* pipe, const char* mrb_file)
 {
     assert(pipe);
+    if (mrb_file) {
+        assert(strlen(mrb_file) > 0);
+    }
 
     int rc = -1;
     self_t* self = (self_t*)zmalloc(sizeof(self_t));
     if (!self)
         return NULL;
 
-    if (mrb_file) {
-        assert(strlen(mrb_file) > 0);
-        self->mrb_file = strdup(mrb_file);
-        if (self->mrb_file)
-            self->mrb = mrb_open();
-    }
-    else {
-        self->mrb = mrb_open();
-    }
-
+    self->mrb = mrb_open();
     if (self->mrb) {
         mrb_state* mrb = self->mrb;
         struct mrb_jmpbuf* prev_jmp = mrb->jmp;
@@ -286,9 +293,9 @@ s_self_new(zsock_t* pipe, const char* mrb_file)
         MRB_TRY(&c_jmp)
         {
             mrb->jmp = &c_jmp;
-            if (self->mrb_file) {
-                FILE* fp = fopen(self->mrb_file, "r");
-                if (fp == NULL) {
+            if (mrb_file) {
+                FILE* fp = fopen(mrb_file, "rb");
+                if (!fp) {
                     mrb_sys_fail(mrb, "fopen");
                 }
                 mrb_load_irep_file(mrb, fp);
@@ -356,20 +363,17 @@ mrb_actor_gen_sub(mrb_state* mrb, mrb_value self)
 
     mrb_value sub = mrb_str_new(mrb, NULL, 2 + 1 + 8);
     byte* subscribe = (byte*)RSTRING_PTR(sub);
-    subscribe[0] = (byte)(((0xAAA0 | signature) >> 8) & 255);
-    subscribe[1] = (byte)(((0xAAA0 | signature)) & 255);
-    subscribe += 2;
-    *(byte*)subscribe = id;
-    subscribe++;
-
-    subscribe[0] = (byte)(((object_id) >> 56) & 255);
-    subscribe[1] = (byte)(((object_id) >> 48) & 255);
-    subscribe[2] = (byte)(((object_id) >> 40) & 255);
-    subscribe[3] = (byte)(((object_id) >> 32) & 255);
-    subscribe[4] = (byte)(((object_id) >> 24) & 255);
-    subscribe[5] = (byte)(((object_id) >> 16) & 255);
-    subscribe[6] = (byte)(((object_id) >> 8) & 255);
-    subscribe[7] = (byte)(((object_id)) & 255);
+    *subscribe++ = (byte)(((0xAAA0 | signature) >> 8) & 255);
+    *subscribe++ = (byte)(((0xAAA0 | signature)) & 255);
+    *subscribe++ = (byte)(((id)) & 255);
+    *subscribe++ = (byte)(((object_id) >> 56) & 255);
+    *subscribe++ = (byte)(((object_id) >> 48) & 255);
+    *subscribe++ = (byte)(((object_id) >> 40) & 255);
+    *subscribe++ = (byte)(((object_id) >> 32) & 255);
+    *subscribe++ = (byte)(((object_id) >> 24) & 255);
+    *subscribe++ = (byte)(((object_id) >> 16) & 255);
+    *subscribe++ = (byte)(((object_id) >> 8) & 255);
+    *subscribe++ = (byte)(((object_id)) & 255);
 
     return sub;
 }

@@ -2,7 +2,7 @@ class Actor
   class Error < StandardError; end
   class ProtocolError < Error; end
 
-  attr_reader :pub_endpoint
+  attr_reader :zactor, :pub_endpoint
 
   def initialize(options = {})
     @dealer = CZMQ::Zsock.new ZMQ::DEALER
@@ -82,6 +82,8 @@ class Actor
   end
 
   class Proxy
+    attr_reader :object_id
+
     def initialize(actor, object_id)
       @actor = actor
       @object_id = object_id
