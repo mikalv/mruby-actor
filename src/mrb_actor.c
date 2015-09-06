@@ -180,6 +180,7 @@ mrb_actor_router_reader(zloop_t* reactor, zsock_t* router, void* args)
             zchunk_t* result_chunk = zchunk_new(RSTRING_PTR(result_str), RSTRING_LEN(result_str));
             actor_message_set_id(self->actor_msg, ACTOR_MESSAGE_SEND_OK);
             actor_message_set_result(self->actor_msg, &result_chunk);
+            mrb->jmp = prev_jmp;
         }
         MRB_CATCH(&c_jmp)
         {
@@ -244,6 +245,7 @@ mrb_actor_pull_reader(zloop_t* reactor, zsock_t* pull, void* args)
             zchunk_t* result_chunk = zchunk_new(RSTRING_PTR(result_str), RSTRING_LEN(result_str));
             actor_message_set_id(self->actor_msg, ACTOR_MESSAGE_ASYNC_SEND_OK);
             actor_message_set_result(self->actor_msg, &result_chunk);
+            mrb->jmp = prev_jmp;
         }
         MRB_CATCH(&c_jmp)
         {
@@ -276,6 +278,7 @@ static self_t*
 s_self_new(zsock_t* pipe, const char* mrb_file)
 {
     assert(pipe);
+    assert(zsock_is(pipe));
     if (mrb_file) {
         assert(strlen(mrb_file) > 0);
     }

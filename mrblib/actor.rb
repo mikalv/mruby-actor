@@ -38,6 +38,10 @@ class Actor
     end
   end
 
+  def load_string(string)
+    @zactor.sendx("LOAD STRING", string)
+  end
+
   def init(mrb_class, *args)
     @actor_message.id = ActorMessage::INITIALIZE
     @actor_message.mrb_class = String(mrb_class)
