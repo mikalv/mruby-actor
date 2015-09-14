@@ -4,6 +4,10 @@
   script = "zproto_codec_mruby"
   package_dir = ".">
 
+  <header>
+    <field name = "version" type = "number" size = "1" value = "1" />
+  </header>
+
   <message name = "initialize" id = "1">
     <field name = "mrb_class" type = "string" />
     <field name = "args" type = "chunk" />

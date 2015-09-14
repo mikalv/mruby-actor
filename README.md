@@ -18,11 +18,14 @@ mruby/bin/mrbc worker.rb
 ```
 --------
 ```ruby
-actor = Actor.new(mrb_file: 'worker.mrb')
+actor = Actor.new
+
+actor.load_irep_file('worker.mrb')
 
 worker = actor.init('Worker')
 
 worker.send(:heavy_lifting)
 
 worker.async_send(:heavy_lifting)
+
 ```

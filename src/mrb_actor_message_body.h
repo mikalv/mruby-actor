@@ -150,7 +150,7 @@ mrb_actor_message_set_routing_id (mrb_state *mrb, mrb_value mrb_self)
 
     mrb_get_args (mrb, "s", &routing_id_str, &routing_id_len);
 
-    if (routing_id_len > 256) {
+    if (routing_id_len > 255) {
         mrb_raise (mrb, E_RANGE_ERROR, "routing_id is too large");
     }
 

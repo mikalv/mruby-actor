@@ -1,0 +1,18 @@
+The following ABNF grammar defines the mruby actor discovery:
+
+    actor_discovery = *( OBJECT-NEW )
+
+    ;  No description                                                        
+
+    OBJECT-NEW      = signature %d1 version mrb_class object_id
+    signature       = %xAA %xA8             ; two octets
+    version         = number-1              ; 
+    mrb_class       = string                ; 
+    object_id       = number-8              ; 
+
+    ; Strings are always length + text contents
+    string          = number-1 *VCHAR
+
+    ; Numbers are unsigned integers in network byte order
+    number-1        = 1OCTET
+    number-8        = 8OCTET

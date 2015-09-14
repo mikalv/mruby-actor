@@ -21,36 +21,44 @@
 /*  These are the actor_message messages:
 
     INITIALIZE - 
+        version             number 1    
         mrb_class           string      
         args                chunk       
 
     INITIALIZE_OK - 
+        version             number 1    
         object_id           number 8    
 
     SEND_MESSAGE - 
+        version             number 1    
         object_id           number 8    
         method              string      
         args                chunk       
 
     SEND_OK - 
+        version             number 1    
         result              chunk       
 
     ERROR - 
+        version             number 1    
         mrb_class           string      
         error               string      
 
     ASYNC_SEND_MESSAGE - 
+        version             number 1    
         object_id           number 8    
         uuid                uuid        
         method              string      
         args                chunk       
 
     ASYNC_SEND_OK - 
+        version             number 1    
         object_id           number 8    
         uuid                uuid        
         result              chunk       
 
     ASYNC_ERROR - 
+        version             number 1    
         object_id           number 8    
         uuid                uuid        
         mrb_class           string      

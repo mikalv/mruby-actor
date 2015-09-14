@@ -4,37 +4,43 @@ The following ABNF grammar defines the mruby actor messages:
 
     ;  No description                                                        
 
-    INITIALIZE      = signature %d1 mrb_class args
+    INITIALIZE      = signature %d1 version mrb_class args
     signature       = %xAA %xA7             ; two octets
+    version         = number-1              ; 
     mrb_class       = string                ; 
     args            = chunk                 ; 
 
     ;  No description                                                        
 
-    INITIALIZE-OK   = signature %d2 object_id
+    INITIALIZE-OK   = signature %d2 version object_id
+    version         = number-1              ; 
     object_id       = number-8              ; 
 
     ;  No description                                                        
 
-    SEND-MESSAGE    = signature %d3 object_id method args
+    SEND-MESSAGE    = signature %d3 version object_id method args
+    version         = number-1              ; 
     object_id       = number-8              ; 
     method          = string                ; 
     args            = chunk                 ; 
 
     ;  No description                                                        
 
-    SEND-OK         = signature %d4 result
+    SEND-OK         = signature %d4 version result
+    version         = number-1              ; 
     result          = chunk                 ; 
 
     ;  No description                                                        
 
-    ERROR           = signature %d5 mrb_class error
+    ERROR           = signature %d5 version mrb_class error
+    version         = number-1              ; 
     mrb_class       = string                ; 
     error           = string                ; 
 
     ;  No description                                                        
 
-    ASYNC-SEND-MESSAGE = signature %d6 object_id uuid method args
+    ASYNC-SEND-MESSAGE = signature %d6 version object_id uuid method args
+    version         = number-1              ; 
     object_id       = number-8              ; 
     uuid            = uuid                  ; 
     method          = string                ; 
@@ -42,14 +48,16 @@ The following ABNF grammar defines the mruby actor messages:
 
     ;  No description                                                        
 
-    ASYNC-SEND-OK   = signature %d7 object_id uuid result
+    ASYNC-SEND-OK   = signature %d7 version object_id uuid result
+    version         = number-1              ; 
     object_id       = number-8              ; 
     uuid            = uuid                  ; 
     result          = chunk                 ; 
 
     ;  No description                                                        
 
-    ASYNC-ERROR     = signature %d8 object_id uuid mrb_class error
+    ASYNC-ERROR     = signature %d8 version object_id uuid mrb_class error
+    version         = number-1              ; 
     object_id       = number-8              ; 
     uuid            = uuid                  ; 
     mrb_class       = string                ; 

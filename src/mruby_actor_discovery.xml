@@ -1,0 +1,16 @@
+<class name = "actor_discovery"
+  signature = "8"
+  title = "mruby actor discovery"
+  script = "zproto_codec_c"
+  package_dir = "."
+  virtual = "1">
+
+  <header>
+    <field name = "version" type = "number" size = "1" value = "1" />
+  </header>
+
+  <message name = "object new" id = "1">
+    <field name = "mrb_class" type = "string" />
+    <field name = "object_id" type = "number" size = "8" />
+  </message>
+</class>

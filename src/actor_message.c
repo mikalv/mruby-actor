@@ -265,6 +265,14 @@ actor_message_recv (actor_message_t *self, zsock_t *input)
 
     switch (self->id) {
         case ACTOR_MESSAGE_INITIALIZE:
+            {
+                byte version;
+                GET_NUMBER1 (version);
+                if (version != 1) {
+                    zsys_warning ("actor_message: version is invalid");
+                    goto malformed;
+                }
+            }
             GET_STRING (self->mrb_class);
             {
                 size_t chunk_size;
@@ -280,10 +288,26 @@ actor_message_recv (actor_message_t *self, zsock_t *input)
             break;
 
         case ACTOR_MESSAGE_INITIALIZE_OK:
+            {
+                byte version;
+                GET_NUMBER1 (version);
+                if (version != 1) {
+                    zsys_warning ("actor_message: version is invalid");
+                    goto malformed;
+                }
+            }
             GET_NUMBER8 (self->object_id);
             break;
 
         case ACTOR_MESSAGE_SEND_MESSAGE:
+            {
+                byte version;
+                GET_NUMBER1 (version);
+                if (version != 1) {
+                    zsys_warning ("actor_message: version is invalid");
+                    goto malformed;
+                }
+            }
             GET_NUMBER8 (self->object_id);
             GET_STRING (self->method);
             {
@@ -301,6 +325,14 @@ actor_message_recv (actor_message_t *self, zsock_t *input)
 
         case ACTOR_MESSAGE_SEND_OK:
             {
+                byte version;
+                GET_NUMBER1 (version);
+                if (version != 1) {
+                    zsys_warning ("actor_message: version is invalid");
+                    goto malformed;
+                }
+            }
+            {
                 size_t chunk_size;
                 GET_NUMBER4 (chunk_size);
                 if (self->needle + chunk_size > (self->ceiling)) {
@@ -314,11 +346,27 @@ actor_message_recv (actor_message_t *self, zsock_t *input)
             break;
 
         case ACTOR_MESSAGE_ERROR:
+            {
+                byte version;
+                GET_NUMBER1 (version);
+                if (version != 1) {
+                    zsys_warning ("actor_message: version is invalid");
+                    goto malformed;
+                }
+            }
             GET_STRING (self->mrb_class);
             GET_STRING (self->error);
             break;
 
         case ACTOR_MESSAGE_ASYNC_SEND_MESSAGE:
+            {
+                byte version;
+                GET_NUMBER1 (version);
+                if (version != 1) {
+                    zsys_warning ("actor_message: version is invalid");
+                    goto malformed;
+                }
+            }
             GET_NUMBER8 (self->object_id);
             if (self->needle + ZUUID_LEN > (self->ceiling)) {
                 zsys_warning ("actor_message: uuid is invalid");
@@ -342,6 +390,14 @@ actor_message_recv (actor_message_t *self, zsock_t *input)
             break;
 
         case ACTOR_MESSAGE_ASYNC_SEND_OK:
+            {
+                byte version;
+                GET_NUMBER1 (version);
+                if (version != 1) {
+                    zsys_warning ("actor_message: version is invalid");
+                    goto malformed;
+                }
+            }
             GET_NUMBER8 (self->object_id);
             if (self->needle + ZUUID_LEN > (self->ceiling)) {
                 zsys_warning ("actor_message: uuid is invalid");
@@ -364,6 +420,14 @@ actor_message_recv (actor_message_t *self, zsock_t *input)
             break;
 
         case ACTOR_MESSAGE_ASYNC_ERROR:
+            {
+                byte version;
+                GET_NUMBER1 (version);
+                if (version != 1) {
+                    zsys_warning ("actor_message: version is invalid");
+                    goto malformed;
+                }
+            }
             GET_NUMBER8 (self->object_id);
             if (self->needle + ZUUID_LEN > (self->ceiling)) {
                 zsys_warning ("actor_message: uuid is invalid");
@@ -408,15 +472,18 @@ actor_message_send (actor_message_t *self, zsock_t *output)
     size_t frame_size = 2 + 1;          //  Signature and message ID
     switch (self->id) {
         case ACTOR_MESSAGE_INITIALIZE:
+            frame_size += 1;            //  version
             frame_size += 1 + strlen (self->mrb_class);
             frame_size += 4;            //  Size is 4 octets
             if (self->args)
                 frame_size += zchunk_size (self->args);
             break;
         case ACTOR_MESSAGE_INITIALIZE_OK:
+            frame_size += 1;            //  version
             frame_size += 8;            //  object_id
             break;
         case ACTOR_MESSAGE_SEND_MESSAGE:
+            frame_size += 1;            //  version
             frame_size += 8;            //  object_id
             frame_size += 1 + strlen (self->method);
             frame_size += 4;            //  Size is 4 octets
@@ -424,15 +491,18 @@ actor_message_send (actor_message_t *self, zsock_t *output)
                 frame_size += zchunk_size (self->args);
             break;
         case ACTOR_MESSAGE_SEND_OK:
+            frame_size += 1;            //  version
             frame_size += 4;            //  Size is 4 octets
             if (self->result)
                 frame_size += zchunk_size (self->result);
             break;
         case ACTOR_MESSAGE_ERROR:
+            frame_size += 1;            //  version
             frame_size += 1 + strlen (self->mrb_class);
             frame_size += 1 + strlen (self->error);
             break;
         case ACTOR_MESSAGE_ASYNC_SEND_MESSAGE:
+            frame_size += 1;            //  version
             frame_size += 8;            //  object_id
             frame_size += ZUUID_LEN;    //  uuid
             frame_size += 1 + strlen (self->method);
@@ -441,6 +511,7 @@ actor_message_send (actor_message_t *self, zsock_t *output)
                 frame_size += zchunk_size (self->args);
             break;
         case ACTOR_MESSAGE_ASYNC_SEND_OK:
+            frame_size += 1;            //  version
             frame_size += 8;            //  object_id
             frame_size += ZUUID_LEN;    //  uuid
             frame_size += 4;            //  Size is 4 octets
@@ -448,6 +519,7 @@ actor_message_send (actor_message_t *self, zsock_t *output)
                 frame_size += zchunk_size (self->result);
             break;
         case ACTOR_MESSAGE_ASYNC_ERROR:
+            frame_size += 1;            //  version
             frame_size += 8;            //  object_id
             frame_size += ZUUID_LEN;    //  uuid
             frame_size += 1 + strlen (self->mrb_class);
@@ -464,6 +536,7 @@ actor_message_send (actor_message_t *self, zsock_t *output)
 
     switch (self->id) {
         case ACTOR_MESSAGE_INITIALIZE:
+            PUT_NUMBER1 (1);
             PUT_STRING (self->mrb_class);
             if (self->args) {
                 PUT_NUMBER4 (zchunk_size (self->args));
@@ -477,10 +550,12 @@ actor_message_send (actor_message_t *self, zsock_t *output)
             break;
 
         case ACTOR_MESSAGE_INITIALIZE_OK:
+            PUT_NUMBER1 (1);
             PUT_NUMBER8 (self->object_id);
             break;
 
         case ACTOR_MESSAGE_SEND_MESSAGE:
+            PUT_NUMBER1 (1);
             PUT_NUMBER8 (self->object_id);
             PUT_STRING (self->method);
             if (self->args) {
@@ -495,6 +570,7 @@ actor_message_send (actor_message_t *self, zsock_t *output)
             break;
 
         case ACTOR_MESSAGE_SEND_OK:
+            PUT_NUMBER1 (1);
             if (self->result) {
                 PUT_NUMBER4 (zchunk_size (self->result));
                 memcpy (self->needle,
@@ -507,11 +583,13 @@ actor_message_send (actor_message_t *self, zsock_t *output)
             break;
 
         case ACTOR_MESSAGE_ERROR:
+            PUT_NUMBER1 (1);
             PUT_STRING (self->mrb_class);
             PUT_STRING (self->error);
             break;
 
         case ACTOR_MESSAGE_ASYNC_SEND_MESSAGE:
+            PUT_NUMBER1 (1);
             PUT_NUMBER8 (self->object_id);
             if (self->uuid)
                 zuuid_export (self->uuid, self->needle);
@@ -531,6 +609,7 @@ actor_message_send (actor_message_t *self, zsock_t *output)
             break;
 
         case ACTOR_MESSAGE_ASYNC_SEND_OK:
+            PUT_NUMBER1 (1);
             PUT_NUMBER8 (self->object_id);
             if (self->uuid)
                 zuuid_export (self->uuid, self->needle);
@@ -549,6 +628,7 @@ actor_message_send (actor_message_t *self, zsock_t *output)
             break;
 
         case ACTOR_MESSAGE_ASYNC_ERROR:
+            PUT_NUMBER1 (1);
             PUT_NUMBER8 (self->object_id);
             if (self->uuid)
                 zuuid_export (self->uuid, self->needle);
@@ -577,17 +657,20 @@ actor_message_print (actor_message_t *self)
     switch (self->id) {
         case ACTOR_MESSAGE_INITIALIZE:
             zsys_debug ("ACTOR_MESSAGE_INITIALIZE:");
+            zsys_debug ("    version=1");
             zsys_debug ("    mrb_class='%s'", self->mrb_class);
             zsys_debug ("    args=[ ... ]");
             break;
 
         case ACTOR_MESSAGE_INITIALIZE_OK:
             zsys_debug ("ACTOR_MESSAGE_INITIALIZE_OK:");
+            zsys_debug ("    version=1");
             zsys_debug ("    object_id=%ld", (long) self->object_id);
             break;
 
         case ACTOR_MESSAGE_SEND_MESSAGE:
             zsys_debug ("ACTOR_MESSAGE_SEND_MESSAGE:");
+            zsys_debug ("    version=1");
             zsys_debug ("    object_id=%ld", (long) self->object_id);
             zsys_debug ("    method='%s'", self->method);
             zsys_debug ("    args=[ ... ]");
@@ -595,17 +678,20 @@ actor_message_print (actor_message_t *self)
 
         case ACTOR_MESSAGE_SEND_OK:
             zsys_debug ("ACTOR_MESSAGE_SEND_OK:");
+            zsys_debug ("    version=1");
             zsys_debug ("    result=[ ... ]");
             break;
 
         case ACTOR_MESSAGE_ERROR:
             zsys_debug ("ACTOR_MESSAGE_ERROR:");
+            zsys_debug ("    version=1");
             zsys_debug ("    mrb_class='%s'", self->mrb_class);
             zsys_debug ("    error='%s'", self->error);
             break;
 
         case ACTOR_MESSAGE_ASYNC_SEND_MESSAGE:
             zsys_debug ("ACTOR_MESSAGE_ASYNC_SEND_MESSAGE:");
+            zsys_debug ("    version=1");
             zsys_debug ("    object_id=%ld", (long) self->object_id);
             zsys_debug ("    uuid=");
             if (self->uuid)
@@ -618,6 +704,7 @@ actor_message_print (actor_message_t *self)
 
         case ACTOR_MESSAGE_ASYNC_SEND_OK:
             zsys_debug ("ACTOR_MESSAGE_ASYNC_SEND_OK:");
+            zsys_debug ("    version=1");
             zsys_debug ("    object_id=%ld", (long) self->object_id);
             zsys_debug ("    uuid=");
             if (self->uuid)
@@ -629,6 +716,7 @@ actor_message_print (actor_message_t *self)
 
         case ACTOR_MESSAGE_ASYNC_ERROR:
             zsys_debug ("ACTOR_MESSAGE_ASYNC_ERROR:");
+            zsys_debug ("    version=1");
             zsys_debug ("    object_id=%ld", (long) self->object_id);
             zsys_debug ("    uuid=");
             if (self->uuid)
