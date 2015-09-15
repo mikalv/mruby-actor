@@ -441,6 +441,44 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
         MRB_END_EXC(&c_jmp);
     } break;
     case ZYRE_EVENT_JOIN: {
+        struct mrb_jmpbuf* prev_jmp = mrb->jmp;
+        struct mrb_jmpbuf c_jmp;
+
+        MRB_TRY(&c_jmp)
+        {
+            mrb->jmp = &c_jmp;
+            zmsg_t* discovery_msg = zmsg_new();
+            actor_discovery_set_id(self->actor_discovery_msg, ACTOR_DISCOVERY_OBJECT_NEW);
+
+            mrb_sym actor_state_sym = mrb_intern_lit(mrb, "mruby_actor_state");
+            mrb_value actor_state = mrb_gv_get(mrb, actor_state_sym);
+            mrb_value keys = mrb_hash_keys(mrb, actor_state);
+            for (mrb_int i = 0; i != RARRAY_LEN(keys); i++) {
+                mrb_value object_id_val = mrb_ary_ref(mrb, keys, i);
+                actor_discovery_set_object_id(self->actor_discovery_msg, mrb_fixnum(object_id_val));
+                mrb_value object = mrb_hash_get(mrb, actor_state, object_id_val);
+                actor_discovery_set_mrb_class(self->actor_discovery_msg, mrb_obj_classname(mrb, object));
+                actor_discovery_send(self->actor_discovery_msg, discovery_msg);
+                mrb_gc_arena_restore(mrb, ai);
+            }
+            size_t size = 0;
+            byte *buffer = NULL;
+            size = zmsg_encode(discovery_msg, &buffer);
+            zmsg_destroy(&discovery_msg);
+            discovery_msg = zmsg_new();
+            zmsg_addmem(discovery_msg, buffer, size);
+            free(buffer);
+            zyre_whisper(self->discovery, sender, &discovery_msg);
+            zmsg_destroy(&discovery_msg);
+            mrb->jmp = prev_jmp;
+        }
+        MRB_CATCH(&c_jmp)
+        {
+            mrb->jmp = prev_jmp;
+            mrb_p(mrb, mrb_obj_value(mrb->exc));
+            mrb->exc = NULL;
+        }
+        MRB_END_EXC(&c_jmp);
 
     } break;
     case ZYRE_EVENT_LEAVE: {
@@ -472,6 +510,55 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
 
     } break;
     case ZYRE_EVENT_WHISPER: {
+        zmsg_t* event_msg = zyre_event_msg(event);
+        zframe_t* frame = zmsg_pop(event_msg);
+        zmsg_t* msg = zmsg_decode(zframe_data(frame), zframe_size(frame));
+        zframe_destroy(&frame);
+
+        while (zmsg_size(msg) > 0 ) {
+            actor_discovery_recv(self->actor_discovery_msg, msg);
+            switch (actor_discovery_id(self->actor_discovery_msg)) {
+            case ACTOR_DISCOVERY_OBJECT_NEW: {
+                struct mrb_jmpbuf* prev_jmp = mrb->jmp;
+                struct mrb_jmpbuf c_jmp;
+
+                MRB_TRY(&c_jmp)
+                {
+                    mrb->jmp = &c_jmp;
+                    mrb_sym remote_actor_state_sym = mrb_intern_lit(mrb, "mruby_remote_actor_state");
+                    mrb_value remote_actor_state = mrb_gv_get(mrb, remote_actor_state_sym);
+                    mrb_value name_str = mrb_str_new_static(mrb, name, strlen(name));
+                    mrb_value remote_actor = mrb_hash_get(mrb, remote_actor_state, name_str);
+                    mrb_sym objects_sym = mrb_intern_lit(mrb, "objects");
+                    mrb_value objects_val = mrb_symbol_value(objects_sym);
+                    mrb_value remote_actor_objects = mrb_hash_get(mrb, remote_actor, objects_val);
+                    const char* mrb_class = actor_discovery_mrb_class(self->actor_discovery_msg);
+                    mrb_value mrb_class_str = mrb_str_new_static(mrb, mrb_class, strlen(mrb_class));
+                    mrb_value mrb_class_objs = mrb_hash_get(mrb, remote_actor_objects, mrb_class_str);
+                    if (mrb_nil_p(mrb_class_objs)) {
+                        mrb_class_objs = mrb_ary_new_capa(mrb, 1);
+                        mrb_hash_set(mrb, remote_actor_objects, mrb_class_str, mrb_class_objs);
+                    }
+
+                    uint64_t object_id = actor_discovery_object_id(self->actor_discovery_msg);
+                    mrb_value object_id_val = mrb_fixnum_value(object_id);
+                    mrb_ary_push(mrb, mrb_class_objs, object_id_val);
+                    mrb->jmp = prev_jmp;
+                }
+                MRB_CATCH(&c_jmp)
+                {
+                    mrb->jmp = prev_jmp;
+                    mrb_p(mrb, mrb_obj_value(mrb->exc));
+                    mrb->exc = NULL;
+                }
+                MRB_END_EXC(&c_jmp);
+            } break;
+            default: {
+            }
+            }
+            mrb_gc_arena_restore(mrb, ai);
+        }
+        zmsg_destroy(&msg);
 
     } break;
     case ZYRE_EVENT_SHOUT: {
