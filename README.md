@@ -87,6 +87,6 @@ If you absoluteley have to use blocking operations, don't ever send any messages
 Security
 ========
 
-At the moment, anyone who can connect to a actor endpoint can execute anything on that actor, this will be addressed once https://github.com/zeromq/zyr has authentication, feel free to open a PR for it.
+At the moment, anyone who can connect to a actor endpoint can execute anything on that actor, this will be addressed once https://github.com/zeromq/zyre has authentication, feel free to open a PR for it.
 
 Mruby is quite interesting when it comes to Security, when you for example never want to use eval, simple don't compile it with support for it.
