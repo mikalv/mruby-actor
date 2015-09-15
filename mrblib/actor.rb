@@ -4,7 +4,10 @@ class Actor
 
   def initialize(options = {})
     @dealer = CZMQ::Zsock.new ZMQ::DEALER
+    @dealer.rcvtimeo = 10000
+    @dealer.sndtimeo = 10000
     @push = CZMQ::Zsock.new ZMQ::PUSH
+    @push.sndtimeo = 10000
     @actor_message = ActorMessage.new
     @name = options.fetch(:name) {String(object_id)}
     @zactor = CZMQ::Zactor.new(ZACTOR_FN, @name)
@@ -125,6 +128,8 @@ class Actor
     dealer = @remote_dealers.fetch(name) do
       remote_actor = remote_actors.fetch(name)
       dealer = CZMQ::Zsock.new ZMQ::DEALER
+      dealer.sndtimeo = 10000
+      dealer.rcvtimeo = 10000
       dealer.connect(remote_actor[:headers]["mrb-actor-v1-router"])
       @remote_dealers[name] = dealer
       dealer
@@ -142,6 +147,8 @@ class Actor
     else
       raise ProtocolError, "Invalid Message recieved"
     end
+  rescue Errno::EWOULDBLOCK, Errno::EAGAIN
+    @remote_dealers.delete(name)
   end
 
   def remote_send(name, object_id, method, *args)
@@ -166,12 +173,15 @@ class Actor
     else
       raise ProtocolError, "Invalid Message recieved"
     end
+  rescue Errno::EWOULDBLOCK, Errno::EAGAIN
+    @remote_dealers.delete(name)
   end
 
   def remote_async_send(name, object_id, method, *args)
     push = @remote_pushs.fetch(name) do
       remote_actor = remote_actors.fetch(name)
       push = CZMQ::Zsock.new ZMQ::PUSH
+      push.sndtimeo = 10000
       push.connect(remote_actor[:headers]["mrb-actor-v1-pull"])
       @remote_pushs[name] = push
       push
@@ -183,6 +193,8 @@ class Actor
     @actor_message.args = args.to_msgpack
     @actor_message.send(push)
     @actor_message.uuid.dup
+  rescue Errno::EWOULDBLOCK, Errno::EAGAIN
+    @remote_pushs.delete(name)
   end
 
   class Proxy
