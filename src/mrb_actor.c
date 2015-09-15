@@ -404,32 +404,30 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
             mrb->jmp = &c_jmp;
             mrb_sym remote_actor_state_sym = mrb_intern_lit(mrb, "mruby_remote_actor_state");
             mrb_value remote_actor_state_hash = mrb_gv_get(mrb, remote_actor_state_sym);
-            mrb_value remote_actor_hash = mrb_hash_new_capa(mrb, 3);
+            mrb_value remote_actor_hash = mrb_hash_new_capa(mrb, 2);
             mrb_value sender_str = mrb_str_new_cstr(mrb, sender);
             mrb_value headers_hash = mrb_hash_new_capa(mrb, zhash_size(headers));
             mrb_value objects_hash = mrb_hash_new(mrb);
-            mrb_sym uuid_sym = mrb_intern_lit(mrb, "uuid");
-            mrb_value uuid_val = mrb_symbol_value(uuid_sym);
             mrb_sym headers_sym = mrb_intern_lit(mrb, "headers");
             mrb_value headers_val = mrb_symbol_value(headers_sym);
             mrb_sym objects_sym = mrb_intern_lit(mrb, "objects");
             mrb_value objects_val = mrb_symbol_value(objects_sym);
             mrb_value name_str = mrb_str_new_cstr(mrb, name);
 
-            mrb_hash_set(mrb, remote_actor_hash, uuid_val, sender_str);
-            mrb_hash_set(mrb, remote_actor_hash, headers_val, headers_hash);
-            mrb_hash_set(mrb, remote_actor_hash, objects_val, objects_hash);
-            mrb_hash_set(mrb, remote_actor_state_hash, name_str, remote_actor_hash);
-
+            int ae = mrb_gc_arena_save(mrb);
             const char* value = (const char*)zhash_first(headers);
             while (value) {
                 const char* key = zhash_cursor(headers);
                 mrb_value key_str = mrb_str_new_cstr(mrb, key);
                 mrb_value value_str = mrb_str_new_cstr(mrb, value);
                 mrb_hash_set(mrb, headers_hash, key_str, value_str);
-                mrb_gc_arena_restore(mrb, ai);
+                mrb_gc_arena_restore(mrb, ae);
                 value = (const char*)zhash_next(headers);
             }
+
+            mrb_hash_set(mrb, remote_actor_hash, headers_val, headers_hash);
+            mrb_hash_set(mrb, remote_actor_hash, objects_val, objects_hash);
+            mrb_hash_set(mrb, remote_actor_state_hash, name_str, remote_actor_hash);
             mrb->jmp = prev_jmp;
         }
         MRB_CATCH(&c_jmp)
@@ -453,20 +451,25 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
             mrb_sym actor_state_sym = mrb_intern_lit(mrb, "mruby_actor_state");
             mrb_value actor_state = mrb_gv_get(mrb, actor_state_sym);
             mrb_value keys = mrb_hash_keys(mrb, actor_state);
+            int ae = mrb_gc_arena_save(mrb);
             for (mrb_int i = 0; i != RARRAY_LEN(keys); i++) {
                 mrb_value object_id_val = mrb_ary_ref(mrb, keys, i);
-                actor_discovery_set_object_id(self->actor_discovery_msg, mrb_fixnum(object_id_val));
+                mrb_int object_id = mrb_fixnum(object_id_val);
+                actor_discovery_set_object_id(self->actor_discovery_msg, object_id);
                 mrb_value object = mrb_hash_get(mrb, actor_state, object_id_val);
-                actor_discovery_set_mrb_class(self->actor_discovery_msg, mrb_obj_classname(mrb, object));
+                const char* classname = mrb_obj_classname(mrb, object);
+                actor_discovery_set_mrb_class(self->actor_discovery_msg, classname);
+                mrb_gc_arena_restore(mrb, ae);
                 actor_discovery_send(self->actor_discovery_msg, discovery_msg);
-                mrb_gc_arena_restore(mrb, ai);
             }
             size_t size = 0;
             byte *buffer = NULL;
             size = zmsg_encode(discovery_msg, &buffer);
+            mrb_assert(buffer);
             zmsg_destroy(&discovery_msg);
             discovery_msg = zmsg_new();
-            zmsg_addmem(discovery_msg, buffer, size);
+            int rc = zmsg_addmem(discovery_msg, buffer, size);
+            mrb_assert(rc == 0);
             free(buffer);
             zyre_whisper(self->discovery, sender, &discovery_msg);
             zmsg_destroy(&discovery_msg);
@@ -666,25 +669,31 @@ s_self_new(zsock_t* pipe, const char* name)
         zloop_ignore_interrupts(self->reactor);
         rc = zloop_reader(self->reactor, pipe, mrb_actor_pipe_reader, self);
     }
-    if (rc == 0)
+    if (rc == 0) {
         self->actor_msg = actor_message_new();
+        rc = -1;
+    }
     if (self->actor_msg)
         self->router = zsock_new(ZMQ_ROUTER);
     if (self->router)
         rc = zloop_reader(self->reactor, self->router, mrb_actor_router_reader, self);
-    if (rc == 0)
+    if (rc == 0) {
         self->pull = zsock_new(ZMQ_PULL);
+        rc = -1;
+    }
     if (self->pull)
         rc = zloop_reader(self->reactor, self->pull, mrb_actor_pull_reader, self);
-    if (rc == 0)
+    if (rc == 0) {
         self->pub = zsock_new(ZMQ_PUB);
+        rc = -1;
+    }
     if (self->pub)
         self->discovery = zyre_new(name);
     if (self->discovery)
         rc = zloop_reader(self->reactor, zyre_socket(self->discovery), mrb_actor_zyre_reader, self);
     if (rc == 0)
         self->actor_discovery_msg = actor_discovery_new();
-    if (rc == -1 || !self->actor_discovery_msg)
+    if (!self->actor_discovery_msg)
         s_self_destroy(&self);
 
     return self;
@@ -735,7 +744,6 @@ void mrb_mruby_actor_gem_init(mrb_state* mrb)
     mrb_actor_class = mrb_define_class(mrb, "Actor", mrb->object_class);
     mrb_define_const(mrb, mrb_actor_class, "ZACTOR_FN", mrb_cptr_value(mrb, mrb_zactor_fn));
     mrb_define_method(mrb, mrb_actor_class, "gen_sub", mrb_actor_gen_sub, MRB_ARGS_REQ(3));
-    mrb_intern_lit(mrb, "uuid");
     mrb_intern_lit(mrb, "headers");
     mrb_intern_lit(mrb, "objects");
 
