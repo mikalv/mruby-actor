@@ -147,8 +147,9 @@ class Actor
     else
       raise ProtocolError, "Invalid Message recieved"
     end
-  rescue Errno::EWOULDBLOCK, Errno::EAGAIN
+  rescue Errno::EWOULDBLOCK, Errno::EAGAIN => e
     @remote_dealers.delete(name)
+    raise e
   end
 
   def remote_send(name, object_id, method, *args)
@@ -173,8 +174,9 @@ class Actor
     else
       raise ProtocolError, "Invalid Message recieved"
     end
-  rescue Errno::EWOULDBLOCK, Errno::EAGAIN
+  rescue Errno::EWOULDBLOCK, Errno::EAGAIN => e
     @remote_dealers.delete(name)
+    raise e
   end
 
   def remote_async_send(name, object_id, method, *args)
@@ -193,8 +195,9 @@ class Actor
     @actor_message.args = args.to_msgpack
     @actor_message.send(push)
     @actor_message.uuid.dup
-  rescue Errno::EWOULDBLOCK, Errno::EAGAIN
+  rescue Errno::EWOULDBLOCK, Errno::EAGAIN => e
     @remote_pushs.delete(name)
+    raise e
   end
 
   class Proxy
