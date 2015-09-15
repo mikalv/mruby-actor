@@ -34,26 +34,31 @@ class Actor
       errno = Integer(CZMQ::Zframe.recv(@zactor).to_str(true))
       raise SystemCallError._sys_fail(errno, "could not bind pub to #{pub_endpoint}")
     end
-    if options[:zyre_endpoint]
-      @zactor.sendx("ZYRE SET ENDPOINT", options[:zyre_endpoint])
-      if @zactor.wait == 1
-        raise Error, "could not bind zyre endpoint to #{options[:zyre_endpoint]}"
-      end
-    end
-    if options[:zyre_gossip_bind]
-      @zactor.sendx("ZYRE GOSSIP BIND", options[:zyre_gossip_bind])
-    end
-    if options[:zyre_gossip_connect]
-      @zactor.sendx("ZYRE GOSSIP CONNECT", options[:zyre_gossip_connect])
-    end
-    if options.has_key?(:zyre_start)
-      @zactor.sendx("ZYRE START")
-      if @zactor.wait == 1
-        raise Error, "could not start zyre"
-      end
-    end
     @remote_dealers = {}
     @remote_pushs = {}
+  end
+
+  def zyre_endpoint=(endpoint)
+    @zactor.sendx("ZYRE SET ENDPOINT", endpoint)
+    if @zactor.wait == 1
+      raise Error, "could not bind zyre endpoint to #{endpoint}"
+    end
+  end
+
+  def zyre_gossip_bind(endpoint)
+    @zactor.sendx("ZYRE GOSSIP BIND", endpoint)
+  end
+
+  def zyre_gossip_connect(endpoint)
+    @zactor.sendx("ZYRE GOSSIP CONNECT", endpoint)
+  end
+
+  def zyre_start
+    @zactor.sendx("ZYRE START")
+    if @zactor.wait == 1
+      raise Error, "could not start zyre"
+    end
+    self
   end
 
   def load_irep_file(file)

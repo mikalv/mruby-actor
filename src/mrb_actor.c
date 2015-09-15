@@ -445,34 +445,37 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
         MRB_TRY(&c_jmp)
         {
             mrb->jmp = &c_jmp;
-            zmsg_t* discovery_msg = zmsg_new();
-            actor_discovery_set_id(self->actor_discovery_msg, ACTOR_DISCOVERY_OBJECT_NEW);
-
             mrb_sym actor_state_sym = mrb_intern_lit(mrb, "mruby_actor_state");
             mrb_value actor_state = mrb_gv_get(mrb, actor_state_sym);
-            mrb_value keys = mrb_hash_keys(mrb, actor_state);
-            int ae = mrb_gc_arena_save(mrb);
-            for (mrb_int i = 0; i != RARRAY_LEN(keys); i++) {
-                mrb_value object_id_val = mrb_ary_ref(mrb, keys, i);
-                mrb_int object_id = mrb_fixnum(object_id_val);
-                actor_discovery_set_object_id(self->actor_discovery_msg, object_id);
-                mrb_value object = mrb_hash_get(mrb, actor_state, object_id_val);
-                const char* classname = mrb_obj_classname(mrb, object);
-                actor_discovery_set_mrb_class(self->actor_discovery_msg, classname);
-                mrb_gc_arena_restore(mrb, ae);
-                actor_discovery_send(self->actor_discovery_msg, discovery_msg);
+
+            if (mrb_obj_eq(mrb, mrb_hash_empty_p(mrb, actor_state), mrb_false_value())) {
+                zmsg_t* discovery_msg = zmsg_new();
+                actor_discovery_set_id(self->actor_discovery_msg, ACTOR_DISCOVERY_OBJECT_NEW);
+                mrb_value keys = mrb_hash_keys(mrb, actor_state);
+                int ae = mrb_gc_arena_save(mrb);
+                for (mrb_int i = 0; i != RARRAY_LEN(keys); i++) {
+                    mrb_value object_id_val = mrb_ary_ref(mrb, keys, i);
+                    mrb_int object_id = mrb_fixnum(object_id_val);
+                    actor_discovery_set_object_id(self->actor_discovery_msg, object_id);
+                    mrb_value object = mrb_hash_get(mrb, actor_state, object_id_val);
+                    const char* classname = mrb_obj_classname(mrb, object);
+                    actor_discovery_set_mrb_class(self->actor_discovery_msg, classname);
+                    mrb_gc_arena_restore(mrb, ae);
+                    actor_discovery_send(self->actor_discovery_msg, discovery_msg);
+                }
+                size_t size = 0;
+                byte *buffer = NULL;
+                size = zmsg_encode(discovery_msg, &buffer);
+                mrb_assert(buffer);
+                zmsg_destroy(&discovery_msg);
+                discovery_msg = zmsg_new();
+                int rc = zmsg_addmem(discovery_msg, buffer, size);
+                mrb_assert(rc == 0);
+                free(buffer);
+                zyre_whisper(self->discovery, sender, &discovery_msg);
+                zmsg_destroy(&discovery_msg);
             }
-            size_t size = 0;
-            byte *buffer = NULL;
-            size = zmsg_encode(discovery_msg, &buffer);
-            mrb_assert(buffer);
-            zmsg_destroy(&discovery_msg);
-            discovery_msg = zmsg_new();
-            int rc = zmsg_addmem(discovery_msg, buffer, size);
-            mrb_assert(rc == 0);
-            free(buffer);
-            zyre_whisper(self->discovery, sender, &discovery_msg);
-            zmsg_destroy(&discovery_msg);
+
             mrb->jmp = prev_jmp;
         }
         MRB_CATCH(&c_jmp)
