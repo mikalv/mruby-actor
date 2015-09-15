@@ -83,3 +83,10 @@ Blocking operations
 Blocking operations should be avoided at all costs and are forbidden in Actors which can be discovered.
 
 If you absoluteley have to use blocking operations, don't ever send any messages to that actor again, in case of Actors which can be discovered this is not possible because other actors automatically send messages.
+
+Security
+========
+
+At the moment, anyone who can connect to a actor endpoint can execute anything on that actor, this will be addressed once https://github.com/zeromq/zyr has authentication, feel free to open a PR for it.
+
+Mruby is quite interesting when it comes to Security, when you for example never want to use eval, simple don't compile it with support for it.
