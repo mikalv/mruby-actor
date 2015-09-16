@@ -459,8 +459,8 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
                     actor_discovery_set_object_id(self->actor_discovery_msg, object_id);
                     mrb_value object = mrb_hash_get(mrb, actor_state, object_id_val);
                     const char* classname = mrb_obj_classname(mrb, object);
-                    actor_discovery_set_mrb_class(self->actor_discovery_msg, classname);
                     mrb_gc_arena_restore(mrb, ae);
+                    actor_discovery_set_mrb_class(self->actor_discovery_msg, classname);
                     actor_discovery_send(self->actor_discovery_msg, discovery_msg);
                 }
                 size_t size = 0;

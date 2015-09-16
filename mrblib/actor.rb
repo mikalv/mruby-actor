@@ -4,10 +4,7 @@ class Actor
 
   def initialize(options = {})
     @dealer = CZMQ::Zsock.new ZMQ::DEALER
-    @dealer.rcvtimeo = 10000
-    @dealer.sndtimeo = 10000
     @push = CZMQ::Zsock.new ZMQ::PUSH
-    @push.sndtimeo = 10000
     @actor_message = ActorMessage.new
     @name = options.fetch(:name) {String(object_id)}
     @zactor = CZMQ::Zactor.new(ZACTOR_FN, @name)
@@ -41,6 +38,36 @@ class Actor
     @remote_pushs = {}
   end
 
+  def bind_router(endpoint)
+    @zactor.sendx("BIND ROUTER", endpoint)
+    if @zactor.wait == 0
+      CZMQ::Zframe.recv(@zactor).to_str
+    else
+      errno = Integer(CZMQ::Zframe.recv(@zactor).to_str(true))
+      raise SystemCallError._sys_fail(errno, "could not bind router to #{endpoint}")
+    end
+  end
+
+  def bind_pull(endpoint)
+    @zactor.sendx("BIND PULL", endpoint)
+    if @zactor.wait == 0
+      CZMQ::Zframe.recv(@zactor).to_str
+    else
+      errno = Integer(CZMQ::Zframe.recv(@zactor).to_str(true))
+      raise SystemCallError._sys_fail(errno, "could not bind pull to #{endpoint}")
+    end
+  end
+
+  def bind_pub(endpoint)
+    @zactor.sendx("BIND PUB", endpoint)
+    if @zactor.wait == 0
+      CZMQ::Zframe.recv(@zactor).to_str
+    else
+      errno = Integer(CZMQ::Zframe.recv(@zactor).to_str(true))
+      raise SystemCallError._sys_fail(errno, "could not bind pub to #{endpoint}")
+    end
+  end
+
   def zyre_endpoint=(endpoint)
     @zactor.sendx("ZYRE SET ENDPOINT", endpoint)
     if @zactor.wait == 1
@@ -50,10 +77,12 @@ class Actor
 
   def zyre_gossip_bind(endpoint)
     @zactor.sendx("ZYRE GOSSIP BIND", endpoint)
+    self
   end
 
   def zyre_gossip_connect(endpoint)
     @zactor.sendx("ZYRE GOSSIP CONNECT", endpoint)
+    self
   end
 
   def zyre_start
