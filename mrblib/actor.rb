@@ -159,7 +159,7 @@ class Actor
       dealer = CZMQ::Zsock.new ZMQ::DEALER
       dealer.sndtimeo = 10000
       dealer.rcvtimeo = 10000
-      dealer.connect(remote_actor[:headers]["mrb-actor-v1-router"])
+      dealer.connect(remote_actor[:headers].fetch("mrb-actor-v1-router"))
       @remote_dealers[name] = dealer
       dealer
     end
@@ -185,7 +185,7 @@ class Actor
     dealer = @remote_dealers.fetch(name) do
       remote_actor = remote_actors.fetch(name)
       dealer = CZMQ::Zsock.new ZMQ::DEALER
-      dealer.connect(remote_actor[:headers]["mrb-actor-v1-router"])
+      dealer.connect(remote_actor[:headers].fetch("mrb-actor-v1-router"))
       @remote_dealers[name] = dealer
       dealer
     end
@@ -213,7 +213,7 @@ class Actor
       remote_actor = remote_actors.fetch(name)
       push = CZMQ::Zsock.new ZMQ::PUSH
       push.sndtimeo = 10000
-      push.connect(remote_actor[:headers]["mrb-actor-v1-pull"])
+      push.connect(remote_actor[:headers].fetch("mrb-actor-v1-pull"))
       @remote_pushs[name] = push
       push
     end
