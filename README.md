@@ -1,5 +1,11 @@
 # mruby-actor
 
+Prerequirements
+===============
+You need to have czmq and zyre installed on your system, build and installation instructions: https://github.com/zeromq/czmq#building-and-installing
+
+https://github.com/zeromq/zyre has similar installation instructions.
+
 Examples
 ========
 
