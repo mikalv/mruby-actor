@@ -152,7 +152,7 @@ mrb_actor_pipe_reader(zloop_t* reactor, zsock_t* pipe, void* args)
         MRB_CATCH(&c_jmp)
         {
             mrb->jmp = prev_jmp;
-            mrb_p(mrb, mrb_obj_value(mrb->exc));
+            mrb_print_error(mrb);
             zsock_signal(pipe, 1);
             mrb->exc = NULL;
         }
@@ -180,7 +180,7 @@ mrb_actor_pipe_reader(zloop_t* reactor, zsock_t* pipe, void* args)
         MRB_CATCH(&c_jmp)
         {
             mrb->jmp = prev_jmp;
-            mrb_p(mrb, mrb_obj_value(mrb->exc));
+            mrb_print_error(mrb);
             zsock_signal(pipe, 1);
             mrb->exc = NULL;
         }
@@ -410,7 +410,11 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
             mrb_value remote_actor_state_hash = mrb_gv_get(mrb, remote_actor_state_sym);
             mrb_value remote_actor_hash = mrb_hash_new_capa(mrb, 2);
             mrb_value sender_str = mrb_str_new_cstr(mrb, sender);
-            mrb_value headers_hash = mrb_hash_new_capa(mrb, zhash_size(headers));
+            size_t headers_size = 0;
+            if (headers) {
+                headers_size = zhash_size(headers);
+            }
+            mrb_value headers_hash = mrb_hash_new_capa(mrb, headers_size);
             mrb_value objects_hash = mrb_hash_new(mrb);
             mrb_sym headers_sym = mrb_intern_lit(mrb, "headers");
             mrb_value headers_val = mrb_symbol_value(headers_sym);
@@ -439,7 +443,7 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
         MRB_CATCH(&c_jmp)
         {
             mrb->jmp = prev_jmp;
-            mrb_p(mrb, mrb_obj_value(mrb->exc));
+            mrb_print_error(mrb);
             mrb->exc = NULL;
         }
         MRB_END_EXC(&c_jmp);
@@ -486,7 +490,7 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
         MRB_CATCH(&c_jmp)
         {
             mrb->jmp = prev_jmp;
-            mrb_p(mrb, mrb_obj_value(mrb->exc));
+            mrb_print_error(mrb);
             mrb->exc = NULL;
         }
         MRB_END_EXC(&c_jmp);
@@ -513,7 +517,7 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
         MRB_CATCH(&c_jmp)
         {
             mrb->jmp = prev_jmp;
-            mrb_p(mrb, mrb_obj_value(mrb->exc));
+            mrb_print_error(mrb);
             mrb->exc = NULL;
         }
         MRB_END_EXC(&c_jmp);
@@ -559,7 +563,7 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
                 MRB_CATCH(&c_jmp)
                 {
                     mrb->jmp = prev_jmp;
-                    mrb_p(mrb, mrb_obj_value(mrb->exc));
+                    mrb_print_error(mrb);
                     mrb->exc = NULL;
                 }
                 MRB_END_EXC(&c_jmp);
@@ -606,7 +610,7 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
             MRB_CATCH(&c_jmp)
             {
                 mrb->jmp = prev_jmp;
-                mrb_p(mrb, mrb_obj_value(mrb->exc));
+                mrb_print_error(mrb);
                 mrb->exc = NULL;
             }
             MRB_END_EXC(&c_jmp);
@@ -669,7 +673,7 @@ s_self_new(zsock_t* pipe, const char* name)
         MRB_CATCH(&c_jmp)
         {
             mrb->jmp = prev_jmp;
-            mrb_p(mrb, mrb_obj_value(mrb->exc));
+            mrb_print_error(mrb);
         }
         MRB_END_EXC(&c_jmp);
 
