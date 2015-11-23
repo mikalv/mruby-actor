@@ -1,4 +1,8 @@
 # mruby-actor
+Preliminary
+===========
+
+mruby-actor is a library to bring distributed (and local) concurrency to mruby with the [actor model](https://en.wikipedia.org/wiki/Actor_model).
 
 Prerequirements
 ===============
@@ -10,7 +14,14 @@ https://github.com/msgpack/msgpack-c#building-and-installing
 
 Examples
 ========
+```ruby
+actor = Actor.new
+string = actor.init(String, "i am a very long string")
+puts string.send(:to_s)
+```
 
+with a compiled ruby file
+-------------------------
 worker.rb:
 ```ruby
 class Worker
@@ -58,9 +69,9 @@ disc2.zyre_gossip_connect("inproc://zyre")
 disc2.zyre_start
 
 string = disc2.remote_init("disc1", String, "foo bar")
-disc2.remote_actors
+puts disc2.remote_actors
 
-string.send(:to_s)
+puts string.send(:to_s)
 
 ```
 
@@ -80,9 +91,9 @@ disc2.zyre_start
 CZMQ::Zclock.sleep(100) # give them some time to find eachother
 
 string = disc2.remote_init("disc1", String, "foo bar")
-disc2.remote_actors
+puts disc2.remote_actors
 
-string.send(:to_s)
+puts string.send(:to_s)
 ```
 
 Blocking operations
