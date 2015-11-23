@@ -201,13 +201,19 @@ mrb_actor_pipe_reader(zloop_t* reactor, zsock_t* pipe, void* args)
 static int
 mrb_actor_router_reader(zloop_t* reactor, zsock_t* router, void* args)
 {
+    errno = 0;
     self_t* self = (self_t*)args;
     mrb_state* mrb = self->mrb;
-    int ai = mrb_gc_arena_save(mrb);
 
     int rc = actor_message_recv(self->actor_msg, router);
-    if (rc == -1)
-        return rc;
+    if (rc == -1) {
+        if (errno != 0) // system error, exit
+            return rc;
+        else            // malformed message recieved, continue
+            return 0;
+    }
+
+    int ai = mrb_gc_arena_save(mrb);
 
     switch (actor_message_id(self->actor_msg)) {
     case ACTOR_MESSAGE_INITIALIZE: {
@@ -315,13 +321,19 @@ mrb_actor_router_reader(zloop_t* reactor, zsock_t* router, void* args)
 static int
 mrb_actor_pull_reader(zloop_t* reactor, zsock_t* pull, void* args)
 {
+    errno = 0;
     self_t* self = (self_t*)args;
     mrb_state* mrb = self->mrb;
-    int ai = mrb_gc_arena_save(mrb);
 
     int rc = actor_message_recv(self->actor_msg, pull);
-    if (rc == -1)
-        return rc;
+    if (rc == -1) {
+        if (errno != 0) // system error, exit
+            return rc;
+        else            // malformed message recieved, continue
+            return 0;
+    }
+
+    int ai = mrb_gc_arena_save(mrb);
 
     switch (actor_message_id(self->actor_msg)) {
     case ACTOR_MESSAGE_ASYNC_SEND_MESSAGE: {
