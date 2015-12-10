@@ -8,32 +8,11 @@ class Actor
     @actor_message = ActorMessage.new
     @name = options.fetch(:name) {String(object_id)}
     @zactor = CZMQ::Zactor.new(ZACTOR_FN, @name)
-    router_endpoint = options.fetch(:router_endpoint) {"inproc://#{@name}_router"}
-    @zactor.sendx("BIND ROUTER", router_endpoint)
-    if @zactor.wait == 0
-      @router_endpoint = CZMQ::Zframe.recv(@zactor).to_str
-      @dealer.connect(@router_endpoint)
-    else
-      errno = Integer(CZMQ::Zframe.recv(@zactor).to_str(true))
-      raise SystemCallError._sys_fail(errno, "could not bind router to #{router_endpoint}")
-    end
-    pull_endpoint = options.fetch(:pull_endpoint) {"inproc://#{@name}_pull"}
-    @zactor.sendx("BIND PULL", pull_endpoint)
-    if @zactor.wait == 0
-      @pull_endpoint = CZMQ::Zframe.recv(@zactor).to_str
-      @push.connect(@pull_endpoint)
-    else
-      errno = Integer(CZMQ::Zframe.recv(@zactor).to_str(true))
-      raise SystemCallError._sys_fail(errno, "could not bind pull to #{pull_endpoint}")
-    end
-    pub_endpoint = options.fetch(:pub_endpoint) {"inproc://#{@name}_pub"}
-    @zactor.sendx("BIND PUB", pub_endpoint)
-    if @zactor.wait == 0
-      @pub_endpoint = CZMQ::Zframe.recv(@zactor).to_str
-    else
-      errno = Integer(CZMQ::Zframe.recv(@zactor).to_str(true))
-      raise SystemCallError._sys_fail(errno, "could not bind pub to #{pub_endpoint}")
-    end
+    @router_endpoint = bind_router(options.fetch(:router_endpoint) {"inproc://#{@name}_router"})
+    @dealer.connect(@router_endpoint)
+    @pull_endpoint = bind_pull(options.fetch(:pull_endpoint) {"inproc://#{@name}_pull"})
+    @push.connect(@pull_endpoint)
+    @pub_endpoint = bind_pub(options.fetch(:pub_endpoint) {"inproc://#{@name}_pub"})
     @remote_dealers = {}
     @remote_pushs = {}
   end
