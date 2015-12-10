@@ -4,6 +4,6 @@
   spec.summary = 'actor library for mruby'
   spec.add_dependency 'mruby-errno'
   spec.add_dependency 'mruby-czmq'
-  spec.add_dependency 'mruby-msgpack', github: 'Asmod4n/mruby-simplemsgpack'
+  spec.add_dependency 'mruby-simplemsgpack'
   spec.linker.libraries << 'zyre'
 end
