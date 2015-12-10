@@ -208,7 +208,7 @@ mrb_actor_router_reader(zloop_t* reactor, zsock_t* router, void* args)
     int rc = actor_message_recv(self->actor_msg, router);
     if (rc == -1) {
         if (errno != 0) // system error, exit
-            return rc;
+            return -1;
         else            // malformed message recieved, continue
             return 0;
     }
@@ -328,7 +328,7 @@ mrb_actor_pull_reader(zloop_t* reactor, zsock_t* pull, void* args)
     int rc = actor_message_recv(self->actor_msg, pull);
     if (rc == -1) {
         if (errno != 0) // system error, exit
-            return rc;
+            return -1;
         else            // malformed message recieved, continue
             return 0;
     }
@@ -421,7 +421,6 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
             mrb_sym remote_actor_state_sym = mrb_intern_lit(mrb, "mruby_remote_actor_state");
             mrb_value remote_actor_state_hash = mrb_gv_get(mrb, remote_actor_state_sym);
             mrb_value remote_actor_hash = mrb_hash_new_capa(mrb, 2);
-            mrb_value sender_str = mrb_str_new_cstr(mrb, sender);
             size_t headers_size = 0;
             if (headers) {
                 headers_size = zhash_size(headers);
@@ -429,10 +428,13 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
             mrb_value headers_hash = mrb_hash_new_capa(mrb, headers_size);
             mrb_value objects_hash = mrb_hash_new(mrb);
             mrb_sym headers_sym = mrb_intern_lit(mrb, "headers");
-            mrb_value headers_val = mrb_symbol_value(headers_sym);
+            mrb_value headers_sym_val = mrb_symbol_value(headers_sym);
             mrb_sym objects_sym = mrb_intern_lit(mrb, "objects");
-            mrb_value objects_val = mrb_symbol_value(objects_sym);
+            mrb_value objects_sym_val = mrb_symbol_value(objects_sym);
             mrb_value name_str = mrb_str_new_cstr(mrb, name);
+            mrb_hash_set(mrb, remote_actor_hash, headers_sym_val, headers_hash);
+            mrb_hash_set(mrb, remote_actor_hash, objects_sym_val, objects_hash);
+            mrb_hash_set(mrb, remote_actor_state_hash, name_str, remote_actor_hash);
 
             if (headers) {
                 int ae = mrb_gc_arena_save(mrb);
@@ -447,9 +449,6 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
                 }
             }
 
-            mrb_hash_set(mrb, remote_actor_hash, headers_val, headers_hash);
-            mrb_hash_set(mrb, remote_actor_hash, objects_val, objects_hash);
-            mrb_hash_set(mrb, remote_actor_state_hash, name_str, remote_actor_hash);
             mrb->jmp = prev_jmp;
         }
         MRB_CATCH(&c_jmp)
