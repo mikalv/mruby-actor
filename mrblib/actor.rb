@@ -12,7 +12,6 @@ class Actor
     @dealer.connect(@router_endpoint)
     @pull_endpoint = bind_pull(options.fetch(:pull_endpoint) {"inproc://#{@name}_pull"})
     @push.connect(@pull_endpoint)
-    @pub_endpoint = bind_pub(options.fetch(:pub_endpoint) {"inproc://#{@name}_pub"})
     @remote_dealers = {}
     @remote_pushs = {}
   end
@@ -34,16 +33,6 @@ class Actor
     else
       errno = Integer(CZMQ::Zframe.recv(@zactor).to_str(true))
       raise SystemCallError._sys_fail(errno, "could not bind pull to #{endpoint}")
-    end
-  end
-
-  def bind_pub(endpoint)
-    @zactor.sendx("BIND PUB", endpoint)
-    if @zactor.wait == 0
-      CZMQ::Zframe.recv(@zactor).to_str
-    else
-      errno = Integer(CZMQ::Zframe.recv(@zactor).to_str(true))
-      raise SystemCallError._sys_fail(errno, "could not bind pub to #{endpoint}")
     end
   end
 

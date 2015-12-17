@@ -10,7 +10,6 @@ typedef struct {
     actor_message_t* actor_msg;
     zsock_t* router;
     zsock_t* pull;
-    zsock_t* pub;
     zyre_t* discovery;
     actor_discovery_t* actor_discovery_msg;
 } self_t;
@@ -30,7 +29,6 @@ s_self_destroy(self_t** self_p)
         actor_message_destroy(&self->actor_msg);
         zsock_destroy(&self->router);
         zsock_destroy(&self->pull);
-        zsock_destroy(&self->pub);
         if (self->discovery) {
             zyre_stop(self->discovery);
             zclock_sleep(100);
@@ -58,43 +56,27 @@ mrb_actor_pipe_reader(zloop_t* reactor, zsock_t* pipe, void* args)
         rc = -1;
     else if (streq(command, "BIND ROUTER")) {
         char* endpoint = zmsg_popstr(msg);
-        if (zsock_bind(self->router, "%s", endpoint) == -1) {
-            zsock_signal(pipe, 1);
-            zsock_send(pipe, "i", errno);
-        }
-        else {
+        if (zsock_bind(self->router, "%s", endpoint) >= 0) {
             const char* boundendpoint = zsock_endpoint(self->router);
             zyre_set_header(self->discovery, "mrb-actor-v1-router", "%s", boundendpoint);
             zsock_signal(pipe, 0);
             zsock_send(pipe, "s", boundendpoint);
+        } else {
+            zsock_signal(pipe, 1);
+            zsock_send(pipe, "i", errno);
         }
         zstr_free(&endpoint);
     }
     else if (streq(command, "BIND PULL")) {
         char* endpoint = zmsg_popstr(msg);
-        if (zsock_bind(self->pull, "%s", endpoint) == -1) {
-            zsock_signal(pipe, 1);
-            zsock_send(pipe, "i", errno);
-        }
-        else {
+        if (zsock_bind(self->pull, "%s", endpoint) >= 0) {
             const char* boundendpoint = zsock_endpoint(self->pull);
             zyre_set_header(self->discovery, "mrb-actor-v1-pull", "%s", boundendpoint);
             zsock_signal(pipe, 0);
             zsock_send(pipe, "s", boundendpoint);
-        }
-        zstr_free(&endpoint);
-    }
-    else if (streq(command, "BIND PUB")) {
-        char* endpoint = zmsg_popstr(msg);
-        if (zsock_bind(self->pub, "%s", endpoint) == -1) {
+        } else {
             zsock_signal(pipe, 1);
             zsock_send(pipe, "i", errno);
-        }
-        else {
-            const char* boundendpoint = zsock_endpoint(self->pub);
-            zyre_set_header(self->discovery, "mrb-actor-v1-pub", "%s", boundendpoint);
-            zsock_signal(pipe, 0);
-            zsock_send(pipe, "s", boundendpoint);
         }
         zstr_free(&endpoint);
     }
@@ -102,8 +84,7 @@ mrb_actor_pipe_reader(zloop_t* reactor, zsock_t* pipe, void* args)
         char* endpoint = zmsg_popstr(msg);
         if (zyre_set_endpoint(self->discovery, "%s", endpoint) == -1) {
             zsock_signal(pipe, 1);
-        }
-        else {
+        } else {
             zsock_signal(pipe, 0);
         }
         zstr_free(&endpoint);
@@ -121,8 +102,7 @@ mrb_actor_pipe_reader(zloop_t* reactor, zsock_t* pipe, void* args)
     else if (streq(command, "ZYRE START")) {
         if (zyre_start(self->discovery) == -1) {
             zsock_signal(pipe, 1);
-        }
-        else {
+        } else {
             zyre_join(self->discovery, "mrb-actor-v1");
             zsock_signal(pipe, 0);
         }
@@ -286,6 +266,8 @@ mrb_actor_router_reader(zloop_t* reactor, zsock_t* router, void* args)
             mrb_sym method_sym = mrb_intern_cstr(mrb, method);
             mrb_value result = mrb_funcall_argv(mrb, obj, method_sym, RARRAY_LEN(args_obj), RARRAY_PTR(args_obj));
             mrb_value result_str = mrb_funcall(mrb, result, "to_msgpack", 0);
+            if (!mrb_string_p(result_str))
+                mrb_raise(mrb, E_RUNTIME_ERROR, "result must be a string");
             zchunk_t* result_chunk = zchunk_new(RSTRING_PTR(result_str), RSTRING_LEN(result_str));
             actor_message_set_id(self->actor_msg, ACTOR_MESSAGE_SEND_OK);
             actor_message_set_result(self->actor_msg, &result_chunk);
@@ -359,6 +341,8 @@ mrb_actor_pull_reader(zloop_t* reactor, zsock_t* pull, void* args)
             mrb_sym method_sym = mrb_intern_cstr(mrb, method);
             mrb_value result = mrb_funcall_argv(mrb, obj, method_sym, RARRAY_LEN(args_obj), RARRAY_PTR(args_obj));
             mrb_value result_str = mrb_funcall(mrb, result, "to_msgpack", 0);
+            if (!mrb_string_p(result_str))
+                mrb_raise(mrb, E_RUNTIME_ERROR, "result must be a string");
             zchunk_t* result_chunk = zchunk_new(RSTRING_PTR(result_str), RSTRING_LEN(result_str));
             actor_message_set_id(self->actor_msg, ACTOR_MESSAGE_ASYNC_SEND_OK);
             actor_message_set_result(self->actor_msg, &result_chunk);
@@ -385,10 +369,9 @@ mrb_actor_pull_reader(zloop_t* reactor, zsock_t* pull, void* args)
     }
     }
 
-    rc = actor_message_send(self->actor_msg, self->pub);
     mrb_gc_arena_restore(mrb, ai);
 
-    return rc;
+    return 0;
 }
 
 static int
@@ -479,9 +462,9 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
                     actor_discovery_set_object_id(self->actor_discovery_msg, object_id);
                     mrb_value object = mrb_hash_get(mrb, actor_state, object_id_val);
                     const char* classname = mrb_obj_classname(mrb, object);
-                    mrb_gc_arena_restore(mrb, ae);
                     actor_discovery_set_mrb_class(self->actor_discovery_msg, classname);
                     actor_discovery_send(self->actor_discovery_msg, discovery_msg);
+                    mrb_gc_arena_restore(mrb, ae);
                 }
                 size_t size = 0;
                 byte *buffer = NULL;
@@ -559,7 +542,7 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
                     mrb_value objects_val = mrb_symbol_value(objects_sym);
                     mrb_value remote_actor_objects = mrb_hash_get(mrb, remote_actor, objects_val);
                     const char* mrb_class = actor_discovery_mrb_class(self->actor_discovery_msg);
-                    mrb_value mrb_class_str = mrb_str_new_static(mrb, mrb_class, strlen(mrb_class));
+                    mrb_value mrb_class_str = mrb_str_new_cstr(mrb, mrb_class);
                     mrb_value mrb_class_objs = mrb_hash_get(mrb, remote_actor_objects, mrb_class_str);
                     if (mrb_nil_p(mrb_class_objs)) {
                         mrb_class_objs = mrb_ary_new_capa(mrb, 1);
@@ -606,7 +589,7 @@ mrb_actor_zyre_reader(zloop_t* reactor, zsock_t* pull, void* args)
                 mrb_value objects_val = mrb_symbol_value(objects_sym);
                 mrb_value remote_actor_objects = mrb_hash_get(mrb, remote_actor, objects_val);
                 const char* mrb_class = actor_discovery_mrb_class(self->actor_discovery_msg);
-                mrb_value mrb_class_str = mrb_str_new_static(mrb, mrb_class, strlen(mrb_class));
+                mrb_value mrb_class_str = mrb_str_new_cstr(mrb, mrb_class);
                 mrb_value mrb_class_objs = mrb_hash_get(mrb, remote_actor_objects, mrb_class_str);
                 if (mrb_nil_p(mrb_class_objs)) {
                     mrb_class_objs = mrb_ary_new_capa(mrb, 1);
@@ -709,11 +692,9 @@ s_self_new(zsock_t* pipe, const char* name)
     if (self->pull)
         rc = zloop_reader(self->reactor, self->pull, mrb_actor_pull_reader, self);
     if (rc == 0) {
-        self->pub = zsock_new(ZMQ_PUB);
+        self->discovery = zyre_new(name);
         rc = -1;
     }
-    if (self->pub)
-        self->discovery = zyre_new(name);
     if (self->discovery)
         rc = zloop_reader(self->reactor, zyre_socket(self->discovery), mrb_actor_zyre_reader, self);
     if (rc == 0)
@@ -738,37 +719,12 @@ mrb_zactor_fn(zsock_t* pipe, void* name)
     zsock_signal(pipe, 0);
 }
 
-static mrb_value
-mrb_actor_gen_sub(mrb_state* mrb, mrb_value self)
-{
-    mrb_int signature, id, object_id;
-
-    mrb_get_args(mrb, "iii", &signature, &id, &object_id);
-
-    mrb_value sub = mrb_str_new(mrb, NULL, 2 + 1 + 8);
-    byte* subscribe = (byte*)RSTRING_PTR(sub);
-    *subscribe++ = (byte)(((0xAAA0 | signature) >> 8) & 255);
-    *subscribe++ = (byte)(((0xAAA0 | signature)) & 255);
-    *subscribe++ = (byte)(((id)) & 255);
-    *subscribe++ = (byte)(((object_id) >> 56) & 255);
-    *subscribe++ = (byte)(((object_id) >> 48) & 255);
-    *subscribe++ = (byte)(((object_id) >> 40) & 255);
-    *subscribe++ = (byte)(((object_id) >> 32) & 255);
-    *subscribe++ = (byte)(((object_id) >> 24) & 255);
-    *subscribe++ = (byte)(((object_id) >> 16) & 255);
-    *subscribe++ = (byte)(((object_id) >> 8) & 255);
-    *subscribe++ = (byte)(((object_id)) & 255);
-
-    return sub;
-}
-
 void mrb_mruby_actor_gem_init(mrb_state* mrb)
 {
     struct RClass* mrb_actor_class;
 
     mrb_actor_class = mrb_define_class(mrb, "Actor", mrb->object_class);
     mrb_define_const(mrb, mrb_actor_class, "ZACTOR_FN", mrb_cptr_value(mrb, mrb_zactor_fn));
-    mrb_define_method(mrb, mrb_actor_class, "gen_sub", mrb_actor_gen_sub, MRB_ARGS_REQ(3));
     mrb_intern_lit(mrb, "headers");
     mrb_intern_lit(mrb, "objects");
 
