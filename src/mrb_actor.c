@@ -349,7 +349,7 @@ mrb_actor_pull_reader(zloop_t* reactor, zsock_t* pull, void* args)
         }
         MRB_END_EXC(&c_jmp);
     } break;
-    default:
+    default: {}
     }
 
     mrb_gc_arena_restore(mrb, ai);
