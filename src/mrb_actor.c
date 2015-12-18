@@ -339,34 +339,17 @@ mrb_actor_pull_reader(zloop_t* reactor, zsock_t* pull, void* args)
             if (!mrb_array_p(args_obj))
                 mrb_raise(mrb, E_ARGUMENT_ERROR, "args must be a Array");
             mrb_sym method_sym = mrb_intern_cstr(mrb, method);
-            mrb_value result = mrb_funcall_argv(mrb, obj, method_sym, RARRAY_LEN(args_obj), RARRAY_PTR(args_obj));
-            mrb_value result_str = mrb_funcall(mrb, result, "to_msgpack", 0);
-            if (!mrb_string_p(result_str))
-                mrb_raise(mrb, E_RUNTIME_ERROR, "result must be a string");
-            zchunk_t* result_chunk = zchunk_new(RSTRING_PTR(result_str), RSTRING_LEN(result_str));
-            actor_message_set_id(self->actor_msg, ACTOR_MESSAGE_ASYNC_SEND_OK);
-            actor_message_set_result(self->actor_msg, &result_chunk);
+            mrb_funcall_argv(mrb, obj, method_sym, RARRAY_LEN(args_obj), RARRAY_PTR(args_obj));
             mrb->jmp = prev_jmp;
         }
         MRB_CATCH(&c_jmp)
         {
             mrb->jmp = prev_jmp;
-            actor_message_set_id(self->actor_msg, ACTOR_MESSAGE_ASYNC_ERROR);
-            mrb_value exc = mrb_obj_value(mrb->exc);
-            const char* classname = mrb_obj_classname(mrb, exc);
-            actor_message_set_mrb_class(self->actor_msg, classname);
-            mrb_value exc_str = mrb_funcall(mrb, exc, "to_s", 0);
-            const char* exc_msg = mrb_string_value_cstr(mrb, &exc_str);
-            actor_message_set_error(self->actor_msg, exc_msg);
             mrb->exc = NULL;
         }
         MRB_END_EXC(&c_jmp);
     } break;
-    default: {
-        actor_message_set_id(self->actor_msg, ACTOR_MESSAGE_ASYNC_ERROR);
-        actor_message_set_mrb_class(self->actor_msg, "Actor::ProtocolError");
-        actor_message_set_error(self->actor_msg, "Invalid Message recieved");
-    }
+    default:
     }
 
     mrb_gc_arena_restore(mrb, ai);
