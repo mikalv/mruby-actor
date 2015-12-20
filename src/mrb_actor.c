@@ -345,6 +345,7 @@ mrb_actor_pull_reader(zloop_t* reactor, zsock_t* pull, void* args)
         MRB_CATCH(&c_jmp)
         {
             mrb->jmp = prev_jmp;
+            mrb_print_error(mrb);
             mrb->exc = NULL;
         }
         MRB_END_EXC(&c_jmp);
