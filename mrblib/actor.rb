@@ -105,11 +105,10 @@ class Actor
   def async_send(object_id, method, *args)
     @actor_message.id = ActorMessage::ASYNC_SEND_MESSAGE
     @actor_message.object_id = Integer(object_id)
-    @actor_message.create_uuid
     @actor_message.method = String(method)
     @actor_message.args = args.to_msgpack
     @actor_message.send(@push)
-    @actor_message.uuid.dup
+    self
   end
 
   def remote_actors
@@ -187,11 +186,10 @@ class Actor
     end
     @actor_message.id = ActorMessage::ASYNC_SEND_MESSAGE
     @actor_message.object_id = Integer(object_id)
-    @actor_message.create_uuid
     @actor_message.method = String(method)
     @actor_message.args = args.to_msgpack
     @actor_message.send(push)
-    @actor_message.uuid.dup
+    self
   rescue Errno::EWOULDBLOCK, Errno::EAGAIN => e
     @remote_pushs.delete(name)
     raise e
