@@ -30,8 +30,6 @@ s_self_destroy(self_t** self_p)
         zsock_destroy(&self->router);
         zsock_destroy(&self->pull);
         if (self->discovery) {
-            zyre_stop(self->discovery);
-            zclock_sleep(100);
             zyre_destroy(&self->discovery);
         }
         actor_discovery_destroy(&self->actor_discovery_msg);
