@@ -210,6 +210,10 @@ class Actor
     def async_send(m, *args)
       @actor.async_send(@object_id, m, *args)
     end
+
+    def respond_to?(m)
+      self.class.instance_methods.include?(m) || @actor.send(@object_id, :respond_to?, m)
+    end
   end
 
   class RemoteProxy
@@ -227,6 +231,10 @@ class Actor
 
     def async_send(m, *args)
       @actor.remote_async_send(@name, @object_id, m, *args)
+    end
+
+    def respond_to?(m)
+      self.class.instance_methods.include?(m) || @actor.remote_send(@name, @object_id, :respond_to?, m)
     end
   end
 end
