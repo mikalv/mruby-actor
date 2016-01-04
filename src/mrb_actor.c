@@ -1,3 +1,4 @@
+#include "mruby/actor.h"
 #include "./mrb_actor_message_body.h"
 #include "actor_discovery.h"
 #include <mruby/dump.h>
@@ -50,8 +51,9 @@ mrb_actor_pipe_reader(zloop_t* reactor, zsock_t* pipe, void* args)
 
     char* command = zmsg_popstr(msg);
     zsys_debug("command: %s", command);
-    if (streq(command, "$TERM"))
+    if (streq(command, "$TERM")) {
         rc = -1;
+    }
     else if (streq(command, "BIND ROUTER")) {
         char* endpoint = zmsg_popstr(msg);
         if (zsock_bind(self->router, "%s", endpoint) >= 0) {
@@ -330,12 +332,14 @@ mrb_actor_pull_reader(zloop_t* reactor, zsock_t* pull, void* args)
             mrb_value actor_state = mrb_gv_get(mrb, actor_state_sym);
             mrb_value object_id_val = mrb_fixnum_value(object_id);
             mrb_value obj = mrb_hash_get(mrb, actor_state, object_id_val);
-            if (mrb_nil_p(obj))
+            if (mrb_nil_p(obj)) {
                 mrb_raise(mrb, E_KEY_ERROR, "object not found");
-            mrb_value args_str = mrb_str_new_static(mrb, zchunk_data(args), zchunk_size(args));
+            }
+            mrb_value args_str = mrb_str_new_static(mrb, (const char*)zchunk_data(args), zchunk_size(args));
             mrb_value args_obj = mrb_funcall(mrb, mrb_obj_value(mrb_module_get(mrb, "MessagePack")), "unpack", 1, args_str);
-            if (!mrb_array_p(args_obj))
+            if (!mrb_array_p(args_obj)) {
                 mrb_raise(mrb, E_ARGUMENT_ERROR, "args must be a Array");
+            }
             mrb_sym method_sym = mrb_intern_cstr(mrb, method);
             mrb_funcall_argv(mrb, obj, method_sym, RARRAY_LEN(args_obj), RARRAY_PTR(args_obj));
             mrb->jmp = prev_jmp;
@@ -656,7 +660,6 @@ s_self_new(zsock_t* pipe, const char* name)
         mrb_gc_arena_restore(mrb, ai);
     }
     if (self->reactor) {
-        zloop_ignore_interrupts(self->reactor);
         rc = zloop_reader(self->reactor, pipe, mrb_actor_pipe_reader, self);
     }
     if (rc == 0) {
@@ -687,7 +690,7 @@ s_self_new(zsock_t* pipe, const char* name)
     return self;
 }
 
-static void
+MRB_API void
 mrb_zactor_fn(zsock_t* pipe, void* name)
 {
     self_t* self = s_self_new(pipe, (const char*)name);
@@ -698,14 +701,11 @@ mrb_zactor_fn(zsock_t* pipe, void* name)
     zloop_start(self->reactor);
 
     s_self_destroy(&self);
-    zsock_signal(pipe, 0);
 }
 
 void mrb_mruby_actor_gem_init(mrb_state* mrb)
 {
-    struct RClass* mrb_actor_class;
-
-    mrb_actor_class = mrb_define_class(mrb, "Actor", mrb->object_class);
+    struct RClass* mrb_actor_class = mrb_define_class(mrb, "Actor", mrb->object_class);
     mrb_define_const(mrb, mrb_actor_class, "ZACTOR_FN", mrb_cptr_value(mrb, mrb_zactor_fn));
     mrb_intern_lit(mrb, "headers");
     mrb_intern_lit(mrb, "objects");
