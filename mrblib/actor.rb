@@ -36,12 +36,12 @@ class Actor < ZMQ::Thread
     LibZMQ.send(@pipe, {type: :remote_async, peerid: peerid, object_id: object_id, method: method, args: args}.to_msgpack, 0)
   end
 
-  def remote_peers
-    LibZMQ.send(@pipe, {type: :remote_peers}.to_msgpack, 0)
+  def remote_actors
+    LibZMQ.send(@pipe, {type: :remote_actors}.to_msgpack, 0)
     msg = MessagePack.unpack(@pipe.recv.to_str(true))
     case msg[:type]
-    when :peers
-      msg[:peers]
+    when :actors
+      msg[:actors]
     when :exception
       raise msg[:exception]
     end
@@ -84,28 +84,32 @@ class Actor < ZMQ::Thread
   end
 
   class Actor_fn < ZMQ::Thread_fn
+    ROUTER_ENDPOINT = 'router_endpoint'.freeze
+    ROUTER_PUBLIC_KEY = 'router_public_key'.freeze
+    MRB_ACTOR_V2 = 'mrb-actor-v2'.freeze
+
     def initialize(options) # these are the options passed to the frontend Actor constructor, they are saved as @options
       super
       @client_keypair = @options.fetch(:client_keypair) { LibZMQ.curve_keypair }
-      @remote_server = ZMQ::Router.new(@options.fetch(:remote_server_endpoint))
+      @remote_server = ZMQ::Router.new
       @poller << @remote_server
-      keypair = @options.fetch(:server_keypair) { LibZMQ.curve_keypair }
-      @remote_server.curve_security(type: :server, public_key: keypair[:public_key], secret_key: keypair[:secret_key])
+      server_keypair = @options.fetch(:server_keypair) { LibZMQ.curve_keypair }
+      @remote_server.curve_security(type: :server, secret_key: server_keypair[:secret_key])
+      @remote_server.bind(@options.fetch(:remote_server_endpoint))
       unless @auth
         @auth = ZMQ::Zap.new(authenticator: ZMQ::Zap::Authenticator.new)
         @poller << @auth
       end
-      @zyre = Zyre.new(@options[:zyre])
+      @zyre = Zyre.new
       @poller << @zyre
-      @zyre["router_endpoint"] = @remote_server.last_endpoint
-      @zyre["router_public_key"] = keypair[:public_key]
-      @zyre.join("mrb-actor-v2")
+      @zyre[ROUTER_ENDPOINT] = @remote_server.last_endpoint
+      @zyre[ROUTER_PUBLIC_KEY] = server_keypair[:public_key]
+      @zyre.join(MRB_ACTOR_V2)
       @remote_dealers = {}
-      @remote_actors = {}
+      @zyre.start
     end
 
     def run
-      @zyre.start
       until @interrupted
         @poller.wait do |socket, events|
           case socket
@@ -150,9 +154,12 @@ class Actor < ZMQ::Thread
           when :remote_new, :remote_send
             peerid = msg.delete(:peerid)
             dealer = @remote_dealers.fetch(peerid) do
-              dealer = ZMQ::Dealer.new(@zyre.peer_header_value(peerid, "router_endpoint"))
-              dealer.curve_security(type: :client, server_key: @zyre.peer_header_value(peerid, "router_public_key"),
+              dealer = ZMQ::Dealer.new
+              dealer.curve_security(type: :client, server_key: @zyre.peer_header_value(peerid, ROUTER_PUBLIC_KEY),
                 public_key: @client_keypair[:public_key], secret_key: @client_keypair[:secret_key])
+              dealer.rcvtimeo = 120000
+              dealer.sndtimeo = 120000
+              dealer.connect(@zyre.peer_header_value(peerid, ROUTER_ENDPOINT))
               @remote_dealers[peerid] = dealer
               dealer
             end
@@ -161,22 +168,26 @@ class Actor < ZMQ::Thread
           when :remote_async
             peerid = msg.delete(:peerid)
             dealer = @remote_dealers.fetch(peerid) do
-              dealer = ZMQ::Dealer.new(@zyre.peer_header_value(peerid, "router_endpoint"))
-              dealer.curve_security(type: :client, server_key: @zyre.peer_header_value(peerid, "router_public_key"),
+              dealer = ZMQ::Dealer.new
+              dealer.curve_security(type: :client, server_key: @zyre.peer_header_value(peerid, ROUTER_PUBLIC_KEY),
                 public_key: @client_keypair[:public_key], secret_key: @client_keypair[:secret_key])
+              dealer.rcvtimeo = 120000
+              dealer.sndtimeo = 120000
+              dealer.connect(@zyre.peer_header_value(peerid, ROUTER_ENDPOINT))
               @remote_dealers[peerid] = dealer
               dealer
             end
             LibZMQ.send(dealer, msg.to_msgpack, 0)
-          when :remote_peers
-            peers = {}
-            @zyre.peers_by_group("mrb-actor-v2").each do |peerid|
-              peers[peerid] = {
-                router_endpoint: @zyre.peer_header_value(peerid, "router_endpoint"),
-                router_public_key: @zyre.peer_header_value(peerid, "router_public_key")
+          when :remote_actors
+            actors = []
+            @zyre.peers_by_group(MRB_ACTOR_V2).each do |peerid|
+              actors << {
+                peerid: peerid,
+                router_endpoint: @zyre.peer_header_value(peerid, ROUTER_ENDPOINT),
+                router_public_key: @zyre.peer_header_value(peerid, ROUTER_PUBLIC_KEY)
               }
             end
-            LibZMQ.send(@pipe, {type: :peers, peers: peers}.to_msgpack, 0)
+            LibZMQ.send(@pipe, {type: :actors, actors: actors}.to_msgpack, 0)
           end
         rescue => e
           LibZMQ.send(@pipe, {type: :exception, exception: e}.to_msgpack, 0)
@@ -186,9 +197,11 @@ class Actor < ZMQ::Thread
       ZMQ.logger.crash(e)
     end
 
+    EXIT = 'EXIT'.freeze
+
     def handle_zyre
       event, peerid, *_ = @zyre.recv
-      if event == 'EXIT'
+      if event == EXIT
         @remote_dealers.delete(peerid)
       end
     rescue => e

@@ -7,12 +7,12 @@ The api has been rewritten, more to come.
 Preliminary
 ===========
 
-mruby-actor is a library to bring distributed (and local) concurrency to mruby with the [actor model](https://en.wikipedia.org/wiki/Actor_model).
+mruby-actor is a library to bring distributed concurrency to mruby with the [actor model](https://en.wikipedia.org/wiki/Actor_model).
+If you just need local threading based on the actor model for mruby take a look at [mruby-zmq](https://github.com/Asmod4n/mruby-zmq)
 
 Prerequirements
 ===============
-You need to have [libzmq](https://github.com/zeromq/libzmq) and [zyre](https://github.com/zeromq/zyre) installed on your system
-
+You need to have [libzmq](https://github.com/zeromq/libzmq) with draft methods and [zyre](https://github.com/zeromq/zyre) installed on your system
 
 
 Blocking operations
@@ -24,6 +24,17 @@ Security
 ========
 
 All communication between mruby actors is encrypted, except the Service Discovery based on [zyre](https://github.com/zeromq/zyre), feel free to add a PR for it at zyre.
+
+Examples
+========
+```ruby
+actor = Actor.new(remote_server_endpoint: "tcp://en0:*")
+actor2 = Actor.new(remote_server_endpoint: "tcp://en0:*")
+actor3 = Actor.new(remote_server_endpoint: "tcp://en0:*")
+string = actor2.remote_new(actor2.remote_actors.sample[:peerid], String, "hallo")
+string.async(:upcase!)
+string.to_str
+```
 
 License
 =======
