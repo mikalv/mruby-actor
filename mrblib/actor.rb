@@ -90,10 +90,10 @@ class Actor < ZMQ::Thread
 
     def initialize(options) # these are the options passed to the frontend Actor constructor, they are saved as @options
       super
+      server_keypair = @options.fetch(:server_keypair) { LibZMQ.curve_keypair }
       @client_keypair = @options.fetch(:client_keypair) { LibZMQ.curve_keypair }
       @remote_server = ZMQ::Router.new
       @poller << @remote_server
-      server_keypair = @options.fetch(:server_keypair) { LibZMQ.curve_keypair }
       @remote_server.curve_security(type: :server, secret_key: server_keypair[:secret_key])
       @remote_server.bind(@options.fetch(:remote_server_endpoint))
       unless @auth
