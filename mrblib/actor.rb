@@ -90,16 +90,20 @@ class Actor < ZMQ::Thread
 
     def initialize(options) # these are the options passed to the frontend Actor constructor, they are saved as @options
       super
+      unless @auth
+        @auth = ZMQ::Zap.new(authenticator: ZMQ::Zap::Authenticator.new)
+        @poller << @auth
+      end
       server_keypair = @options.fetch(:server_keypair) { LibZMQ.curve_keypair }
       @client_keypair = @options.fetch(:client_keypair) { LibZMQ.curve_keypair }
       @remote_server = ZMQ::Router.new
       @poller << @remote_server
       @remote_server.curve_security(type: :server, secret_key: server_keypair[:secret_key])
-      @remote_server.bind(@options.fetch(:remote_server_endpoint))
-      unless @auth
-        @auth = ZMQ::Zap.new(authenticator: ZMQ::Zap::Authenticator.new)
-        @poller << @auth
+      unless @remote_server.mechanism == LibZMQ::CURVE
+        raise RuntimeError, "cannot set curve security"
       end
+      @remote_server.bind(@options.fetch(:remote_server_endpoint))
+      @remote_server.identity = @remote_server.last_endpoint
       @zyre = Zyre.new
       @poller << @zyre
       @zyre[ROUTER_ENDPOINT] = @remote_server.last_endpoint
@@ -157,6 +161,9 @@ class Actor < ZMQ::Thread
               dealer = ZMQ::Dealer.new
               dealer.curve_security(type: :client, server_key: @zyre.peer_header_value(peerid, ROUTER_PUBLIC_KEY),
                 public_key: @client_keypair[:public_key], secret_key: @client_keypair[:secret_key])
+              unless dealer.mechanism == LibZMQ::CURVE
+                raise RuntimeError, "cannot set curve security"
+              end
               dealer.rcvtimeo = 120000
               dealer.sndtimeo = 120000
               dealer.connect(@zyre.peer_header_value(peerid, ROUTER_ENDPOINT))
@@ -171,6 +178,9 @@ class Actor < ZMQ::Thread
               dealer = ZMQ::Dealer.new
               dealer.curve_security(type: :client, server_key: @zyre.peer_header_value(peerid, ROUTER_PUBLIC_KEY),
                 public_key: @client_keypair[:public_key], secret_key: @client_keypair[:secret_key])
+              unless dealer.mechanism == LibZMQ::CURVE
+                raise RuntimeError, "cannot set curve security"
+              end
               dealer.rcvtimeo = 120000
               dealer.sndtimeo = 120000
               dealer.connect(@zyre.peer_header_value(peerid, ROUTER_ENDPOINT))
@@ -212,28 +222,40 @@ class Actor < ZMQ::Thread
       peer, msg = @remote_server.recv
       msg = MessagePack.unpack(msg.to_str(true))
       begin
-        case msg[:type]
+        case msg.fetch(:type)
         when :remote_new
-          instance = msg[:class].new(*msg[:args])
+          instance = msg.fetch(:class).new(*msg.fetch(:args))
           id = instance.__id__
+          instance_msg = {
+            type: :instance,
+            object_id: id
+          }.to_msgpack
           @instances[id] = instance
           LibZMQ.msg_send(peer, @remote_server, LibZMQ::SNDMORE)
-          LibZMQ.send(@remote_server, {type: :instance, object_id: id}.to_msgpack, 0)
+          LibZMQ.send(@remote_server, instance_msg, 0)
         when :remote_send
+          result = {
+            type: :result,
+            result: @instances.fetch(msg.fetch(:object_id)).__send__(msg.fetch(:method), *msg.fetch(:args))
+          }.to_msgpack
           LibZMQ.msg_send(peer, @remote_server, LibZMQ::SNDMORE)
-          LibZMQ.send(@remote_server, {type: :result, result: @instances.fetch(msg[:object_id]).__send__(msg[:method], *msg[:args])}.to_msgpack, 0)
+          LibZMQ.send(@remote_server, result, 0)
         when :remote_async
           if (instance = @instances[msg[:object_id]])
             begin
-              instance.__send__(msg[:method], *msg[:args])
+              instance.__send__(msg.fetch(:method), *msg.fetch(:args))
             rescue => e
               ZMQ.logger.crash(e)
             end
           end
         end
       rescue => e
+        exec_msg = {
+          type: :exception,
+          exception: e
+        }.to_msgpack
         LibZMQ.msg_send(peer, @remote_server, LibZMQ::SNDMORE)
-        LibZMQ.send(@remote_server, {type: :exception, exception: e}.to_msgpack, 0)
+        LibZMQ.send(@remote_server, exec_msg, 0)
       end
     rescue => e
       ZMQ.logger.crash(e)
