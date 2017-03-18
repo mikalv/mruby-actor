@@ -68,7 +68,7 @@ class Actor < ZMQ::Thread
         raise ArgumentError, "blocks cannot be migrated"
       end
       @thread.remote_async(@peerid, @object_id, m, *args)
-      nil
+      self
     end
 
     def respond_to?(m)
@@ -102,11 +102,12 @@ class Actor < ZMQ::Thread
       unless @remote_server.mechanism == LibZMQ::CURVE
         raise RuntimeError, "cannot set curve security"
       end
-      @remote_server.bind(@options.fetch(:remote_server_endpoint))
-      @remote_server.identity = @remote_server.last_endpoint
+      @remote_server.bind(@options.fetch(:remote_server_endpoint) { sprintf("tcp://%s:*", ZMQ.network_interfaces.first) } )
+      last_endpoint = @remote_server.last_endpoint
+      @remote_server.identity = last_endpoint
       @zyre = Zyre.new
       @poller << @zyre
-      @zyre[ROUTER_ENDPOINT] = @remote_server.last_endpoint
+      @zyre[ROUTER_ENDPOINT] = last_endpoint
       @zyre[ROUTER_PUBLIC_KEY] = server_keypair[:public_key]
       @zyre.join(MRB_ACTOR_V2)
       @remote_dealers = {}
