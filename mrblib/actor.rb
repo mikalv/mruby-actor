@@ -105,13 +105,13 @@ class Actor < ZMQ::Thread
       @remote_server.bind(@options.fetch(:remote_server_endpoint) { sprintf("tcp://%s:*", ZMQ.network_interfaces.first) } )
       last_endpoint = @remote_server.last_endpoint
       @remote_server.identity = last_endpoint
-      @zyre = Zyre.new
-      @poller << @zyre
-      @zyre[ROUTER_ENDPOINT] = last_endpoint
-      @zyre[ROUTER_PUBLIC_KEY] = server_keypair[:public_key]
-      @zyre.join(MRB_ACTOR_V2)
-      @remote_dealers = {}
-      @zyre.start
+      @discovery = Zyre.new
+      @poller << @discovery
+      @discovery[ROUTER_ENDPOINT] = last_endpoint
+      @discovery[ROUTER_PUBLIC_KEY] = server_keypair[:public_key]
+      @discovery.join(MRB_ACTOR_V2)
+      @remote_clients = {}
+      @discovery.start
     end
 
     def run
@@ -122,12 +122,28 @@ class Actor < ZMQ::Thread
             handle_pipe
           when @auth
             @auth.handle_zap
-          when @zyre
-            handle_zyre
+          when @discovery
+            handle_discovery
           when @remote_server
             handle_server
           end
         end
+      end
+    end
+
+    def remote_client(peerid)
+      @remote_clients.fetch(peerid) do
+        client = ZMQ::Dealer.new
+        client.curve_security(type: :client, server_key: @discovery.peer_header_value(peerid, ROUTER_PUBLIC_KEY),
+          public_key: @client_keypair[:public_key], secret_key: @client_keypair[:secret_key])
+        unless client.mechanism == LibZMQ::CURVE
+          raise RuntimeError, "cannot set curve security"
+        end
+        client.rcvtimeo = 120000
+        client.sndtimeo = 120000
+        client.connect(@discovery.peer_header_value(peerid, ROUTER_ENDPOINT))
+        @remote_clients[peerid] = client
+        client
       end
     end
 
@@ -142,8 +158,8 @@ class Actor < ZMQ::Thread
           when :new
             instance = msg[:class].new(*msg[:args])
             id = instance.__id__
-            @instances[id] = instance
             LibZMQ.send(@pipe, {type: :instance, object_id: id}.to_msgpack, 0)
+            @instances[id] = instance
           when :send
             LibZMQ.send(@pipe, {type: :result, result: @instances.fetch(msg[:object_id]).__send__(msg[:method], *msg[:args])}.to_msgpack, 0)
           when :async
@@ -157,45 +173,18 @@ class Actor < ZMQ::Thread
           when :finalize
             @instances.delete(msg[:object_id])
           when :remote_new, :remote_send
-            peerid = msg.delete(:peerid)
-            dealer = @remote_dealers.fetch(peerid) do
-              dealer = ZMQ::Dealer.new
-              dealer.curve_security(type: :client, server_key: @zyre.peer_header_value(peerid, ROUTER_PUBLIC_KEY),
-                public_key: @client_keypair[:public_key], secret_key: @client_keypair[:secret_key])
-              unless dealer.mechanism == LibZMQ::CURVE
-                raise RuntimeError, "cannot set curve security"
-              end
-              dealer.rcvtimeo = 120000
-              dealer.sndtimeo = 120000
-              dealer.connect(@zyre.peer_header_value(peerid, ROUTER_ENDPOINT))
-              @remote_dealers[peerid] = dealer
-              dealer
-            end
-            LibZMQ.send(dealer, msg.to_msgpack, 0)
-            LibZMQ.msg_send(dealer.recv, @pipe, 0)
+            client = remote_client(msg.delete(:peerid))
+            LibZMQ.send(client, msg.to_msgpack, 0)
+            LibZMQ.msg_send(client.recv, @pipe, 0)
           when :remote_async
-            peerid = msg.delete(:peerid)
-            dealer = @remote_dealers.fetch(peerid) do
-              dealer = ZMQ::Dealer.new
-              dealer.curve_security(type: :client, server_key: @zyre.peer_header_value(peerid, ROUTER_PUBLIC_KEY),
-                public_key: @client_keypair[:public_key], secret_key: @client_keypair[:secret_key])
-              unless dealer.mechanism == LibZMQ::CURVE
-                raise RuntimeError, "cannot set curve security"
-              end
-              dealer.rcvtimeo = 120000
-              dealer.sndtimeo = 120000
-              dealer.connect(@zyre.peer_header_value(peerid, ROUTER_ENDPOINT))
-              @remote_dealers[peerid] = dealer
-              dealer
-            end
-            LibZMQ.send(dealer, msg.to_msgpack, 0)
+            LibZMQ.send(remote_client(msg.delete(:peerid)), msg.to_msgpack, 0)
           when :remote_actors
             actors = []
-            @zyre.peers_by_group(MRB_ACTOR_V2).each do |peerid|
+            @discovery.peers_by_group(MRB_ACTOR_V2).each do |peerid|
               actors << {
                 peerid: peerid,
-                router_endpoint: @zyre.peer_header_value(peerid, ROUTER_ENDPOINT),
-                router_public_key: @zyre.peer_header_value(peerid, ROUTER_PUBLIC_KEY)
+                router_endpoint: @discovery.peer_header_value(peerid, ROUTER_ENDPOINT),
+                router_public_key: @discovery.peer_header_value(peerid, ROUTER_PUBLIC_KEY)
               }
             end
             LibZMQ.send(@pipe, {type: :actors, actors: actors}.to_msgpack, 0)
@@ -210,10 +199,10 @@ class Actor < ZMQ::Thread
 
     EXIT = 'EXIT'.freeze
 
-    def handle_zyre
-      event, peerid, *_ = @zyre.recv
+    def handle_discovery
+      event, peerid, *_ = @discovery.recv
       if event == EXIT
-        @remote_dealers.delete(peerid)
+        @remote_clients.delete(peerid)
       end
     rescue => e
       ZMQ.logger.crash(e)
@@ -231,9 +220,9 @@ class Actor < ZMQ::Thread
             type: :instance,
             object_id: id
           }.to_msgpack
-          @instances[id] = instance
           LibZMQ.msg_send(peer, @remote_server, LibZMQ::SNDMORE)
           LibZMQ.send(@remote_server, instance_msg, 0)
+          @instances[id] = instance
         when :remote_send
           result = {
             type: :result,
