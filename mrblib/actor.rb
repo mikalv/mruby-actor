@@ -102,7 +102,7 @@ class Actor < ZMQ::Thread
       unless @remote_server.mechanism == LibZMQ::CURVE
         raise RuntimeError, "cannot set curve security"
       end
-      @remote_server.bind(@options.fetch(:remote_server_endpoint) { sprintf("tcp://%s:*", ZMQ.network_interfaces.first) } )
+      @remote_server.bind(@options.fetch(:remote_server_endpoint) { sprintf('tcp://%s:*', ZMQ.network_interfaces.first) } )
       last_endpoint = @remote_server.last_endpoint
       @remote_server.identity = last_endpoint
       @discovery = Zyre.new
@@ -148,36 +148,37 @@ class Actor < ZMQ::Thread
     end
 
     def handle_pipe
-      msg = @pipe.recv.to_str(true)
-      if msg == TERM
+      msg = @pipe.recv
+      msg_str = msg.to_str(true)
+      if msg_str == TERM
         @interrupted = true
       else
-        msg = MessagePack.unpack(msg)
+        msg_val = MessagePack.unpack(msg_str)
         begin
-          case msg[:type]
+          case msg_val[:type]
           when :new
-            instance = msg[:class].new(*msg[:args])
+            instance = msg_val[:class].new(*msg_val[:args])
             id = instance.__id__
             LibZMQ.send(@pipe, {type: :instance, object_id: id}.to_msgpack, 0)
             @instances[id] = instance
           when :send
-            LibZMQ.send(@pipe, {type: :result, result: @instances.fetch(msg[:object_id]).__send__(msg[:method], *msg[:args])}.to_msgpack, 0)
+            LibZMQ.send(@pipe, {type: :result, result: @instances.fetch(msg_val[:object_id]).__send__(msg_val[:method], *msg_val[:args])}.to_msgpack, 0)
           when :async
-            if (instance = @instances[msg[:object_id]])
+            if (instance = @instances[msg_val[:object_id]])
               begin
-                instance.__send__(msg[:method], *msg[:args])
+                instance.__send__(msg_val[:method], *msg_val[:args])
               rescue => e
                 ZMQ.logger.crash(e)
               end
             end
           when :finalize
-            @instances.delete(msg[:object_id])
+            @instances.delete(msg_val[:object_id])
           when :remote_new, :remote_send
-            client = remote_client(msg.delete(:peerid))
-            LibZMQ.send(client, msg.to_msgpack, 0)
+            client = remote_client(msg_val[:peerid])
+            LibZMQ.msg_send(msg, client, 0)
             LibZMQ.msg_send(client.recv, @pipe, 0)
           when :remote_async
-            LibZMQ.send(remote_client(msg.delete(:peerid)), msg.to_msgpack, 0)
+            LibZMQ.msg_send(msg, remote_client(msg_val[:peerid]), 0)
           when :remote_actors
             actors = []
             @discovery.peers_by_group(MRB_ACTOR_V2).each do |peerid|
