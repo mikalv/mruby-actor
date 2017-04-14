@@ -86,7 +86,7 @@ class Actor < ZMQ::Thread
   class Actor_fn < ZMQ::Thread_fn
     ROUTER_ENDPOINT = 'router_endpoint'.freeze
     ROUTER_PUBLIC_KEY = 'router_public_key'.freeze
-    MRB_ACTOR_V2 = 'mrb-actor-v2'.freeze
+    VERSION = '2'
 
     def initialize(options) # these are the options passed to the frontend Actor constructor, they are saved as @options
       super
@@ -109,7 +109,8 @@ class Actor < ZMQ::Thread
       @poller << @discovery
       @discovery[ROUTER_ENDPOINT] = last_endpoint
       @discovery[ROUTER_PUBLIC_KEY] = server_keypair[:public_key]
-      @discovery.join(MRB_ACTOR_V2)
+      @group = sprintf('%s-%s', self.class.name, @options.fetch(:version, VERSION))
+      @discovery.join(@group)
       @remote_clients = {}
       @discovery.start
     end
@@ -147,6 +148,18 @@ class Actor < ZMQ::Thread
       end
     end
 
+    def remote_actors
+      actors = []
+      @discovery.peers_by_group(@group).each do |peerid|
+        actors << {
+          peerid: peerid,
+          router_endpoint: @discovery.peer_header_value(peerid, ROUTER_ENDPOINT),
+          router_public_key: @discovery.peer_header_value(peerid, ROUTER_PUBLIC_KEY)
+        }
+      end
+      actors
+    end
+
     def handle_pipe
       msg = @pipe.recv
       msg_str = msg.to_str(true)
@@ -180,15 +193,7 @@ class Actor < ZMQ::Thread
           when :remote_async
             LibZMQ.msg_send(msg, remote_client(msg_val[:peerid]), 0)
           when :remote_actors
-            actors = []
-            @discovery.peers_by_group(MRB_ACTOR_V2).each do |peerid|
-              actors << {
-                peerid: peerid,
-                router_endpoint: @discovery.peer_header_value(peerid, ROUTER_ENDPOINT),
-                router_public_key: @discovery.peer_header_value(peerid, ROUTER_PUBLIC_KEY)
-              }
-            end
-            LibZMQ.send(@pipe, {type: :actors, actors: actors}.to_msgpack, 0)
+            LibZMQ.send(@pipe, {type: :actors, actors: remote_actors}.to_msgpack, 0)
           end
         rescue => e
           LibZMQ.send(@pipe, {type: :exception, exception: e}.to_msgpack, 0)
