@@ -97,7 +97,7 @@ class Actor < ZMQ::Thread
 
     ROUTER_ENDPOINT = 'router_endpoint'.freeze
     ROUTER_PUBLIC_KEY = 'router_public_key'.freeze
-    VERSION = '2'
+    VERSION = '3'
 
     def initialize(options) # these are the options passed to the frontend Actor constructor, they are saved as @options
       super
