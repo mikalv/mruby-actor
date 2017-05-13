@@ -26,11 +26,14 @@ Examples
 ```ruby
 server_keypair = LibZMQ.curve_keypair
 client_keypair = LibZMQ.curve_keypair
-actor = Actor.new(remote_server_endpoint: "tcp://en0:*", server_keypair: server_keypair)
-actor2 = Actor.new(client_keypair: client_keypair)
-actor3 = Actor.new(auth: {class: ZMQ::Zap::Authenticator})
-# if you are on Windows, the only mandatory option is the remote_server_endpoint, it must be something that works locally and from other hosts it wants to interact with. Else it automatically picks the first running network interface it can find and binds to a random port
-sleep 2 # requires conf.gem mgem: 'mruby-sleep' in your build_config.rb
+actor = Actor.new(auth: {class: ZMQ::Zap::Authenticator}, remote_server_endpoint: "tcp://en0:*", server_keypair: server_keypair)
+actor2 = Actor.new(auth: {class: ZMQ::Zap::Authenticator}, client_keypair: client_keypair)
+actor3 = Actor.new(auth: {class: ZMQ::Zap::Authenticator, args: ["hallo", "actor"]})
+actor4 = Actor.new(auth: {class: ZMQ::Zap::Authenticator})
+# if you are on Windows, the only mandatory option is the remote_server_endpoint, it must be something that works locally and from other hosts it wants to interact with. Else it automatically picks the first running network interface it can find and binds to a random port.
+# Take a look at http://api.zeromq.org/master:zmq-bind which endpoints are available in zmq, wildcard tcp ports are supported
+# the inproc transport isn't supported by design, each actor runs in a seperate zmq context, inproc sockets can only communicate in their own zmq context.
+sleep 1 # requires conf.gem mgem: 'mruby-sleep' in your build_config.rb
 string = actor.remote_new(actor.remote_actors.sample[:peerid], String, "hallo")
 string.async(:upcase!)
 string.send(:to_str)
