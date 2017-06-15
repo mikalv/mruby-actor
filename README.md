@@ -37,17 +37,17 @@ Also, this gem won't be turned into a mgem until mruby 1.3 is released, there ar
 Examples
 ========
 ```ruby
-server_keypair = LibZMQ.curve_keypair
-client_keypair = LibZMQ.curve_keypair
-actor = Actor.new(auth: {class: ZMQ::Zap::Authenticator}, remote_server_endpoint: "tcp://en0:*", server_keypair: server_keypair)
-actor2 = Actor.new(auth: {class: ZMQ::Zap::Authenticator}, client_keypair: client_keypair)
+keypair = LibZMQ.curve_keypair
+keypair2 = LibZMQ.curve_keypair
+actor = Actor.new(auth: {class: ZMQ::Zap::Authenticator}, server_endpoint: "tcp://en0:*", keypair: keypair)
+actor2 = Actor.new(auth: {class: ZMQ::Zap::Authenticator}, keypair: keypair2)
 actor3 = Actor.new(auth: {class: ZMQ::Zap::Authenticator, args: ["hallo", "actor"]})
 actor4 = Actor.new(auth: {class: ZMQ::Zap::Authenticator})
-# if you are on Windows, the only mandatory option besides tha auth hash is :remote_server_endpoint, it must be something that works locally and from other hosts it wants to interact with. On other platforms it automatically picks the first running network interface with a broadcast address it can find and binds to a random port.
+# if you are on Windows, the mandatory options besides tha auth hash is :server_endpoint and :broadcast_address, the server endpoint must be something that works locally and from other hosts it wants to interact with, the broadcast address must be the broadcast address of the server endpoint. On other platforms it automatically picks the first running network interface with a broadcast address it can find and binds to a random port.
 # Take a look at http://api.zeromq.org/master:zmq-bind which endpoints are available in zmq, wildcard tcp ports are supported.
 # the inproc transport isn't supported by design, each actor runs in a seperate zmq context, inproc sockets can only communicate in their own zmq context.
 sleep 1 # requires conf.gem mgem: 'mruby-sleep' in your build_config.rb
-string = actor.remote_new(actor.remote_actors.sample[:peerid], String, "hallo")
+string = actor.remote_new(actor.peers.first.first, String, "hallo")
 string.async(:upcase!)
 string.send(:to_str)
 string.to_str
