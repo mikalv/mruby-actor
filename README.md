@@ -2,7 +2,7 @@
 Breaking changes
 ================
 The wire protocol is incompatible with earlier versions, its all msgpack now and is as such compatible to any programming language which has msgpack and zeromq support.
-The discovery of other actors is still handled by [zyre](https://github.com/zeromq/zyre), this might (unlikely) change in the future so [czmq](https://github.com/zeromq/czmq) might not be needed anymore.
+Discovery lends its idea from zyre, but uses a different wire protocol and only runs over multicast.
 Each actor now runs in its own zmq context, this was needed so a clean shutdown is possible. The old mruby-actor had to be forced killed to close itself.
 
 Preliminary
@@ -10,17 +10,15 @@ Preliminary
 mruby-actor is a library to bring distributed concurrency to mruby with the [actor model](https://en.wikipedia.org/wiki/Actor_model).
 If you just need local threading based on the actor model for mruby take a look at [mruby-zmq](https://github.com/Asmod4n/mruby-zmq)
 
-Prerequirements
-===============
-You need to have [libzmq](https://github.com/zeromq/libzmq) with draft methods and [zyre](https://github.com/zeromq/zyre) installed on your system
 
 Blocking operations
 ===================
 Blocking operations must be avoided at all costs. If you really need to block a mrb context do so in a ZMQ::Thread.
+If you block a mruby-actor for longer than 15 seconds its considered to have crashed by other actors.
 
 Security
 ========
-All communication between mruby actors is authenticated and encrypted, except the Service Discovery based on [zyre](https://github.com/zeromq/zyre), feel free to add a PR for it at zyre.
+All communication between mruby actors is authenticated and encrypted, except the Service Discovery, its going to be fully authenticated in another released.
 
 Each Actor expects a Auth class and optionally Arguments for it, the args must be a Array. Take a look at https://github.com/Asmod4n/mruby-zmq/blob/a56c5722902a079777c28de67ad2aca8f499095a/mrblib/zap.rb#L54 how to implement it for your needs.
 The mechanism used in mruby-actor is curve.
